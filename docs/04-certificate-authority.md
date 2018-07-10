@@ -388,13 +388,48 @@ service-account.pem
 
 ## Distribute the Client and Server Certificates
 
-Copy the appropriate certificates and private keys to each worker instance:
+Copy the appropriate certificates and private keys to each instance:
+
+### Linux workers
 
 ```
-for instance in worker-0 worker-1 worker-2; do
+for instance in worker-0; do
   gcloud compute scp ca.pem ${instance}-key.pem ${instance}.pem ${instance}:~/
 done
 ```
+
+### Windows workers
+
+We'll use Google [Cloud Storage](https://cloud.google.com/storage/) for
+transfering the certificates into the Windows worker instances. First, make a
+new bucket and copy the certificates there:
+
+```
+gsutil mb gs://k8s-the-hard-way
+gsutil cp ca.pem gs://k8s-the-hard-way/
+for instance in worker-1 worker-2; do
+  gsutil cp ${instance}-key.pem ${instance}.pem gs://k8s-the-hard-way/
+done
+gsutil ls gs://k8s-the-hard-way
+```
+
+Then, RDP to each Windows instance and download the files. For example, on
+`worker-1` run in a CMD shell or Powershell:
+
+```
+mkdir C:\k
+gsutil cp gs://k8s-the-hard-way/ca.pem C:\k
+gsutil cp gs://k8s-the-hard-way/worker-1*.pem C:\k
+dir C:\k
+```
+
+TODO: grab the hostname automatically here.
+
+TODO: figure out how to perform this via Remote Powershell.
+
+TODO: use a better directory than C:\k.
+
+### Controllers
 
 Copy the appropriate certificates and private keys to each controller instance:
 

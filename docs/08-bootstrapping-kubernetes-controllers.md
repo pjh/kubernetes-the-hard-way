@@ -28,10 +28,10 @@ Download the official Kubernetes release binaries:
 
 ```
 wget -q --show-progress --https-only --timestamping \
-  "https://storage.googleapis.com/kubernetes-release/release/v1.10.2/bin/linux/amd64/kube-apiserver" \
-  "https://storage.googleapis.com/kubernetes-release/release/v1.10.2/bin/linux/amd64/kube-controller-manager" \
-  "https://storage.googleapis.com/kubernetes-release/release/v1.10.2/bin/linux/amd64/kube-scheduler" \
-  "https://storage.googleapis.com/kubernetes-release/release/v1.10.2/bin/linux/amd64/kubectl"
+  "https://storage.googleapis.com/kubernetes-release/release/v1.10.5/bin/linux/amd64/kube-apiserver" \
+  "https://storage.googleapis.com/kubernetes-release/release/v1.10.5/bin/linux/amd64/kube-controller-manager" \
+  "https://storage.googleapis.com/kubernetes-release/release/v1.10.5/bin/linux/amd64/kube-scheduler" \
+  "https://storage.googleapis.com/kubernetes-release/release/v1.10.5/bin/linux/amd64/kubectl"
 ```
 
 Install the Kubernetes binaries:
@@ -64,6 +64,19 @@ INTERNAL_IP=$(curl -s -H "Metadata-Flavor: Google" \
 
 Create the `kube-apiserver.service` systemd unit file:
 
+TODO: verify that all of these apiserver flags are compatible with Windows
+worker nodes.
+  --experimental-encryption-provider-config?
+  --kubelet-certificate-authority?
+  --kubelet-client-certificate?
+  --kubelet-client-key?
+
+TODO: be careful when pasting this text: the --enable-admission-plugins
+line is super long and you may end up with extra spaces.
+
+TODO: I've changed authorization-mode to AlwaysAllow here. Do Windows nodes work
+if I change it back to Node,RBAC?
+
 ```
 cat <<EOF | sudo tee /etc/systemd/system/kube-apiserver.service
 [Unit]
@@ -79,7 +92,7 @@ ExecStart=/usr/local/bin/kube-apiserver \\
   --audit-log-maxbackup=3 \\
   --audit-log-maxsize=100 \\
   --audit-log-path=/var/log/audit.log \\
-  --authorization-mode=Node,RBAC \\
+  --authorization-mode=AlwaysAllow \\
   --bind-address=0.0.0.0 \\
   --client-ca-file=/var/lib/kubernetes/ca.pem \\
   --enable-admission-plugins=Initializers,NamespaceLifecycle,NodeRestriction,LimitRanger,ServiceAccount,DefaultStorageClass,ResourceQuota \\
@@ -245,6 +258,9 @@ sudo systemctl enable nginx
 
 ### Verification
 
+TODO: if you see output with errors, run `journalctl` on the controller
+to see the kube apiserver / controller-manager / scheduler logs.
+
 ```
 kubectl get componentstatuses --kubeconfig admin.kubeconfig
 ```
@@ -257,6 +273,32 @@ etcd-2               Healthy   {"health": "true"}
 etcd-0               Healthy   {"health": "true"}
 etcd-1               Healthy   {"health": "true"}
 ```
+
+```
+kubectl get all -n default
+```
+
+```
+NAME                 TYPE        CLUSTER-IP   EXTERNAL-IP   PORT(S)   AGE
+service/kubernetes   ClusterIP   10.32.0.1    <none>        443/TCP   15m
+```
+
+```
+kubectl get all -n kube-public
+```
+
+```
+No resources found.
+```
+
+```
+kubectl get all -n kube-system
+```
+
+```
+No resources found.
+```
+
 
 Test the nginx HTTP health check proxy:
 
@@ -280,6 +322,10 @@ ok
 ## RBAC for Kubelet Authorization
 
 In this section you will configure RBAC permissions to allow the Kubernetes API Server to access the Kubelet API on each worker node. Access to the Kubelet API is required for retrieving metrics, logs, and executing commands in pods.
+
+TODO: skipped this section for now and got Linux and Windows nodes to work
+without it. Come back and see if Windows node will work with it; I'm not sure if
+Windows kubelet supports RBAC at this time.
 
 > This tutorial sets the Kubelet `--authorization-mode` flag to `Webhook`. Webhook mode uses the [SubjectAccessReview](https://kubernetes.io/docs/admin/authorization/#checking-api-access) API to determine authorization.
 
@@ -366,7 +412,7 @@ Create the external load balancer network resources:
     --http-health-check kubernetes
 
   gcloud compute target-pools add-instances kubernetes-target-pool \
-   --instances controller-0,controller-1,controller-2
+    --instances controller-0,controller-1,controller-2
 
   gcloud compute forwarding-rules create kubernetes-forwarding-rule \
     --address ${KUBERNETES_PUBLIC_ADDRESS} \
@@ -398,7 +444,7 @@ curl --cacert ca.pem https://${KUBERNETES_PUBLIC_ADDRESS}:6443/version
 {
   "major": "1",
   "minor": "10",
-  "gitVersion": "v1.10.2",
+  "gitVersion": "v1.10.5",
   "gitCommit": "81753b10df112992bf51bbc2c2f85208aad78335",
   "gitTreeState": "clean",
   "buildDate": "2018-04-27T09:10:24Z",

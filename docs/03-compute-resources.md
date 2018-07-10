@@ -47,7 +47,7 @@ Create a firewall rule that allows external SSH, ICMP, and HTTPS:
 
 ```
 gcloud compute firewall-rules create kubernetes-the-hard-way-allow-external \
-  --allow tcp:22,tcp:6443,icmp \
+  --allow tcp:22,tcp:6443,tcp:3389,icmp \
   --network kubernetes-the-hard-way \
   --source-ranges 0.0.0.0/0
 ```
@@ -63,8 +63,8 @@ gcloud compute firewall-rules list --filter="network:kubernetes-the-hard-way"
 > output
 
 ```
-NAME                                    NETWORK                  DIRECTION  PRIORITY  ALLOW                 DENY
-kubernetes-the-hard-way-allow-external  kubernetes-the-hard-way  INGRESS    1000      tcp:22,tcp:6443,icmp
+NAME                                    NETWORK                  DIRECTION  PRIORITY  ALLOW                          DENY
+kubernetes-the-hard-way-allow-external  kubernetes-the-hard-way  INGRESS    1000      tcp:22,tcp:6443,tcp:3389,icmp
 kubernetes-the-hard-way-allow-internal  kubernetes-the-hard-way  INGRESS    1000      tcp,udp,icmp
 ```
 
@@ -120,10 +120,13 @@ Each worker instance requires a pod subnet allocation from the Kubernetes cluste
 
 > The Kubernetes cluster CIDR range is defined by the Controller Manager's `--cluster-cidr` flag. In this tutorial the cluster CIDR range will be set to `10.200.0.0/16`, which supports 254 subnets.
 
+TODO: eventually will just want to use ```--image-family
+windows-1803-core-for-containers --image-project windows-cloud``` below.
+
 Create three compute instances which will host the Kubernetes worker nodes:
 
 ```
-for i in 0 1 2; do
+for i in 0; do
   gcloud compute instances create worker-${i} \
     --async \
     --boot-disk-size 200GB \
@@ -131,6 +134,56 @@ for i in 0 1 2; do
     --image-family ubuntu-1804-lts \
     --image-project ubuntu-os-cloud \
     --machine-type n1-standard-1 \
+    --metadata pod-cidr=10.200.${i}.0/24 \
+    --private-network-ip 10.240.0.2${i} \
+    --scopes compute-rw,storage-ro,service-management,service-control,logging-write,monitoring \
+    --subnet kubernetes \
+    --tags kubernetes-the-hard-way,worker
+done
+```
+
+```
+for i in 1 2; do
+  gcloud compute instances create worker-${i} \
+    --async \
+    --boot-disk-size 200GB \
+    --can-ip-forward \
+    --image windows-server-1803-dc-core-for-containers-v1526689277 \
+    --image-project peterhornyack-prod \
+    --machine-type n1-standard-2 \
+    --metadata pod-cidr=10.200.${i}.0/24 \
+    --private-network-ip 10.240.0.2${i} \
+    --scopes compute-rw,storage-ro,service-management,service-control,logging-write,monitoring \
+    --subnet kubernetes \
+    --tags kubernetes-the-hard-way,worker
+done
+```
+
+TODO: remove this one.
+
+```
+for i in 3; do
+  gcloud compute instances create worker-${i}-1709 \
+    --async \
+    --boot-disk-size 200GB \
+    --can-ip-forward \
+    --image-family windows-1709-core-for-containers \
+    --image-project windows-cloud \
+    --machine-type n1-standard-2 \
+    --metadata pod-cidr=10.200.${i}.0/24 \
+    --private-network-ip 10.240.0.2${i} \
+    --scopes compute-rw,storage-ro,service-management,service-control,logging-write,monitoring \
+    --subnet kubernetes \
+    --tags kubernetes-the-hard-way,worker
+done
+for i in 4; do
+  gcloud compute instances create worker-${i}-1803 \
+    --async \
+    --boot-disk-size 200GB \
+    --can-ip-forward \
+    --image windows-server-1803-dc-core-for-containers-v1526689277 \
+    --image-project peterhornyack-prod \
+    --machine-type n1-standard-2 \
     --metadata pod-cidr=10.200.${i}.0/24 \
     --private-network-ip 10.240.0.2${i} \
     --scopes compute-rw,storage-ro,service-management,service-control,logging-write,monitoring \
@@ -151,17 +204,17 @@ gcloud compute instances list
 
 ```
 NAME          ZONE        MACHINE_TYPE   PREEMPTIBLE  INTERNAL_IP  EXTERNAL_IP     STATUS
-controller-0  us-west1-c  n1-standard-1               10.240.0.10  XX.XXX.XXX.XXX  RUNNING
-controller-1  us-west1-c  n1-standard-1               10.240.0.11  XX.XXX.X.XX     RUNNING
-controller-2  us-west1-c  n1-standard-1               10.240.0.12  XX.XXX.XXX.XX   RUNNING
-worker-0      us-west1-c  n1-standard-1               10.240.0.20  XXX.XXX.XXX.XX  RUNNING
-worker-1      us-west1-c  n1-standard-1               10.240.0.21  XX.XXX.XX.XXX   RUNNING
-worker-2      us-west1-c  n1-standard-1               10.240.0.22  XXX.XXX.XX.XX   RUNNING
+controller-0  us-west1-b  n1-standard-1               10.240.0.10  XX.XXX.XXX.XXX  RUNNING
+controller-1  us-west1-b  n1-standard-1               10.240.0.11  XX.XXX.XXX.XXX  RUNNING
+controller-2  us-west1-b  n1-standard-1               10.240.0.12  XX.XXX.XX.XX    RUNNING
+worker-0      us-west1-b  n1-standard-1               10.240.0.20  XX.XXX.XX.XXX   RUNNING
+worker-1      us-west1-b  n1-standard-2               10.240.0.21  XX.XXX.XX.XXX   RUNNING
+worker-2      us-west1-b  n1-standard-2               10.240.0.22  XX.XXX.XXX.XXX  RUNNING
 ```
 
 ## Configuring SSH Access
 
-SSH will be used to configure the controller and worker instances. When connecting to compute instances for the first time SSH keys will be generated for you and stored in the project or instance metadata as describe in the [connecting to instances](https://cloud.google.com/compute/docs/instances/connecting-to-instance) documentation.
+SSH will be used to configure the controller and Linux worker instances. When connecting to compute instances for the first time SSH keys will be generated for you and stored in the project or instance metadata as describe in the [connecting to instances](https://cloud.google.com/compute/docs/instances/connecting-to-instance) documentation.
 
 Test SSH access to the `controller-0` compute instances:
 
@@ -226,5 +279,9 @@ $USER@controller-0:~$ exit
 logout
 Connection to XX.XXX.XXX.XXX closed
 ```
+
+## Configuring RDP Access
+
+TODO: reset Windows passwords and configure RDP client here.
 
 Next: [Provisioning a CA and Generating TLS Certificates](04-certificate-authority.md)

@@ -196,10 +196,28 @@ admin.kubeconfig
 Copy the appropriate `kubelet` and `kube-proxy` kubeconfig files to each worker instance:
 
 ```
-for instance in worker-0 worker-1 worker-2; do
+for instance in worker-0; do
   gcloud compute scp ${instance}.kubeconfig kube-proxy.kubeconfig ${instance}:~/
 done
+gsutil cp kube-proxy.kubeconfig gs://k8s-the-hard-way/
+for instance in worker-1 worker-2; do
+  gsutil cp ${instance}.kubeconfig gs://k8s-the-hard-way/
+done
+gsutil ls gs://k8s-the-hard-way/
 ```
+
+Then, RDP to each Windows instance and download the files. For example, on
+`worker-1` run in a CMD shell or Powershell:
+
+```
+gsutil cp gs://k8s-the-hard-way/kube-proxy.kubeconfig C:\k
+gsutil cp gs://k8s-the-hard-way/worker-1.kubeconfig C:\k
+dir C:\k
+```
+
+TODO: grab the hostname automatically here.
+
+TODO: figure out how to perform this via Remote Powershell.
 
 Copy the appropriate `kube-controller-manager` and `kube-scheduler` kubeconfig files to each controller instance:
 

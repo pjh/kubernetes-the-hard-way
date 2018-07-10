@@ -52,30 +52,53 @@ The etcd key should be prefixed with `k8s:enc:aescbc:v1:key1`, which indicates t
 
 In this section you will verify the ability to create and manage [Deployments](https://kubernetes.io/docs/concepts/workloads/controllers/deployment/).
 
-Create a deployment for the [nginx](https://nginx.org/en/) web server:
+Paste the following text into a file called windows-iis-deployment.yaml:
 
 ```
-kubectl run nginx --image=nginx
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: iis-deployment
+  labels:
+    app: iis
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: iis
+  template:
+    metadata:
+      labels:
+        app: iis
+    spec:
+      containers:
+      - name: iis-servercore
+        image: microsoft/iis:windowsservercore-1803
+      nodeSelector:
+        beta.kubernetes.io/os: windows
 ```
 
-List the pod created by the `nginx` deployment:
+Then run:
 
 ```
-kubectl get pods -l run=nginx
+kubectl create -f windows-iis-deployment.yaml
+watch -n 5 "kubectl get deployment iis-deployment && kubectl get pods"
 ```
 
-> output
+After a few minutes you should see 2 available pods for the iis-deployment
+and the two iis pods should enter status Running.
 
-```
-NAME                     READY     STATUS    RESTARTS   AGE
-nginx-65899c769f-xkfcn   1/1       Running   0          15s
-```
+TODO: expand on this demo. See
+https://github.com/apprenda/kubernetes-ovn-heterogeneous-cluster/tree/master/demo
+for a heterogeneous cluster demo.
 
 ### Port Forwarding
 
 In this section you will verify the ability to access applications remotely using [port forwarding](https://kubernetes.io/docs/tasks/access-application-cluster/port-forward-access-application-cluster/).
 
 Retrieve the full name of the `nginx` pod:
+
+TODO: update this to work for an iis pod. "run=iis" doesn't work, wtf?
 
 ```
 POD_NAME=$(kubectl get pods -l run=nginx -o jsonpath="{.items[0].metadata.name}")

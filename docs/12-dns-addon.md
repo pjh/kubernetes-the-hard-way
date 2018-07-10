@@ -21,6 +21,12 @@ deployment.extensions "kube-dns" created
 
 List the pods created by the `kube-dns` deployment:
 
+TODO: this fails with "ErrImagePull" and "ImagePullBackOff" with these
+instructions; the kube-dns deployment runs on the worker nodes, not the
+controller nodes, so the Windows nodes fail! Figure out what to do about DNS on
+Windows nodes, or maybe figure out a way to configure this to only run on the
+Linux node.
+
 ```
 kubectl get pods -l k8s-app=kube-dns -n kube-system
 ```

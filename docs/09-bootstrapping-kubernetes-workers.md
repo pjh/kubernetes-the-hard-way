@@ -4,7 +4,7 @@ In this lab you will bootstrap three Kubernetes worker nodes. The following comp
 
 ## Prerequisites
 
-The commands in this lab must be run on each worker instance: `worker-0`, `worker-1`, and `worker-2`. Login to each worker instance using the `gcloud` command. Example:
+The commands in this lab must be run on each worker instance: `worker-0`. Login to each worker instance using the `gcloud` command. Example:
 
 ```
 gcloud compute ssh worker-0
@@ -36,9 +36,9 @@ wget -q --show-progress --https-only --timestamping \
   https://github.com/opencontainers/runc/releases/download/v1.0.0-rc5/runc.amd64 \
   https://github.com/containernetworking/plugins/releases/download/v0.6.0/cni-plugins-amd64-v0.6.0.tgz \
   https://github.com/containerd/containerd/releases/download/v1.1.0/containerd-1.1.0.linux-amd64.tar.gz \
-  https://storage.googleapis.com/kubernetes-release/release/v1.10.2/bin/linux/amd64/kubectl \
-  https://storage.googleapis.com/kubernetes-release/release/v1.10.2/bin/linux/amd64/kube-proxy \
-  https://storage.googleapis.com/kubernetes-release/release/v1.10.2/bin/linux/amd64/kubelet
+  https://storage.googleapis.com/kubernetes-release/release/v1.10.5/bin/linux/amd64/kubectl \
+  https://storage.googleapis.com/kubernetes-release/release/v1.10.5/bin/linux/amd64/kube-proxy \
+  https://storage.googleapis.com/kubernetes-release/release/v1.10.5/bin/linux/amd64/kubelet
 ```
 
 Create the installation directories:
@@ -172,19 +172,27 @@ EOF
 
 Create the `kubelet-config.yaml` configuration file:
 
+TODO: for authentication set anonymous to true instead of false since I skipped
+RBAC setup (webhook). For authorization set mode to AlwaysAllow instead of
+Webhook
+(https://github.com/kubernetes/kubernetes/blob/cd78e999f9aade259c177c1698129311c83aa7d3/pkg/kubeapiserver/authorizer/modes/modes.go#L30).
+
+TODO: examine the kubelet config used by Windows demos to see what kind of auth
+they use.
+
 ```
 cat <<EOF | sudo tee /var/lib/kubelet/kubelet-config.yaml
 kind: KubeletConfiguration
 apiVersion: kubelet.config.k8s.io/v1beta1
 authentication:
   anonymous:
-    enabled: false
+    enabled: true
   webhook:
     enabled: true
   x509:
     clientCAFile: "/var/lib/kubernetes/ca.pem"
 authorization:
-  mode: Webhook
+  mode: AlwaysAllow
 clusterDomain: "cluster.local"
 clusterDNS:
   - "10.32.0.10"
@@ -271,7 +279,7 @@ EOF
 }
 ```
 
-> Remember to run the above commands on each worker node: `worker-0`, `worker-1`, and `worker-2`.
+> Remember to run the above commands on each worker node: `worker-0`.
 
 ## Verification
 
@@ -288,9 +296,7 @@ gcloud compute ssh controller-0 \
 
 ```
 NAME       STATUS    ROLES     AGE       VERSION
-worker-0   Ready     <none>    20s       v1.10.2
-worker-1   Ready     <none>    20s       v1.10.2
-worker-2   Ready     <none>    20s       v1.10.2
+worker-0   Ready     <none>    20s       v1.10.5
 ```
 
 Next: [Configuring kubectl for Remote Access](10-configuring-kubectl.md)
