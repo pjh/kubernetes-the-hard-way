@@ -401,8 +401,10 @@ done
 ### Windows workers
 
 We'll use Google [Cloud Storage](https://cloud.google.com/storage/) for
-transfering the certificates into the Windows worker instances. First, make a
-new bucket and copy the certificates there:
+transfering the certificates into the Windows worker instances. `gsutil` is the
+command line tool for working with GCS.
+
+First, make a new bucket and copy the certificates there:
 
 ```
 gsutil mb gs://k8s-the-hard-way
@@ -413,21 +415,22 @@ done
 gsutil ls gs://k8s-the-hard-way
 ```
 
-Then, RDP to each Windows instance and download the files. For example, on
-`worker-1` run in a CMD shell or Powershell:
+Then, RDP to each Windows instance and download the files. `gsutil` is already
+installed in the public Windows images for GCE. Run these 
+
+On `worker-1` run these commands in PowerShell:
 
 ```
+$hostname = $Env:Computername.ToLower()
 mkdir C:\k
 gsutil cp gs://k8s-the-hard-way/ca.pem C:\k
-gsutil cp gs://k8s-the-hard-way/worker-1*.pem C:\k
+gsutil cp gs://k8s-the-hard-way/$hostname*.pem C:\k
 dir C:\k
 ```
 
 TODO: grab the hostname automatically here.
 
 TODO: figure out how to perform this via Remote Powershell.
-
-TODO: use a better directory than C:\k.
 
 ### Controllers
 

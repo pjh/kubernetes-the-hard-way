@@ -43,7 +43,7 @@ gcloud compute firewall-rules create kubernetes-the-hard-way-allow-internal \
   --source-ranges 10.240.0.0/24,10.200.0.0/16
 ```
 
-Create a firewall rule that allows external SSH, ICMP, and HTTPS:
+Create a firewall rule that allows external SSH, ICMP, RDP and HTTPS:
 
 ```
 gcloud compute firewall-rules create kubernetes-the-hard-way-allow-external \
@@ -120,9 +120,6 @@ Each worker instance requires a pod subnet allocation from the Kubernetes cluste
 
 > The Kubernetes cluster CIDR range is defined by the Controller Manager's `--cluster-cidr` flag. In this tutorial the cluster CIDR range will be set to `10.200.0.0/16`, which supports 254 subnets.
 
-TODO: eventually will just want to use ```--image-family
-windows-1803-core-for-containers --image-project windows-cloud``` below.
-
 Create three compute instances which will host the Kubernetes worker nodes:
 
 ```
@@ -138,9 +135,12 @@ for i in 0; do
     --private-network-ip 10.240.0.2${i} \
     --scopes compute-rw,storage-ro,service-management,service-control,logging-write,monitoring \
     --subnet kubernetes \
-    --tags kubernetes-the-hard-way,worker
+    --tags kubernetes-the-hard-way,worker,linux
 done
 ```
+
+TODO: eventually will just want to use ```--image-family
+windows-1803-core-for-containers --image-project windows-cloud``` here:
 
 ```
 for i in 1 2; do
@@ -152,43 +152,11 @@ for i in 1 2; do
     --image-project peterhornyack-prod \
     --machine-type n1-standard-2 \
     --metadata pod-cidr=10.200.${i}.0/24 \
+    --metadata serial-port-enable=1 \
     --private-network-ip 10.240.0.2${i} \
     --scopes compute-rw,storage-ro,service-management,service-control,logging-write,monitoring \
     --subnet kubernetes \
-    --tags kubernetes-the-hard-way,worker
-done
-```
-
-TODO: remove this one.
-
-```
-for i in 3; do
-  gcloud compute instances create worker-${i}-1709 \
-    --async \
-    --boot-disk-size 200GB \
-    --can-ip-forward \
-    --image-family windows-1709-core-for-containers \
-    --image-project windows-cloud \
-    --machine-type n1-standard-2 \
-    --metadata pod-cidr=10.200.${i}.0/24 \
-    --private-network-ip 10.240.0.2${i} \
-    --scopes compute-rw,storage-ro,service-management,service-control,logging-write,monitoring \
-    --subnet kubernetes \
-    --tags kubernetes-the-hard-way,worker
-done
-for i in 4; do
-  gcloud compute instances create worker-${i}-1803 \
-    --async \
-    --boot-disk-size 200GB \
-    --can-ip-forward \
-    --image windows-server-1803-dc-core-for-containers-v1526689277 \
-    --image-project peterhornyack-prod \
-    --machine-type n1-standard-2 \
-    --metadata pod-cidr=10.200.${i}.0/24 \
-    --private-network-ip 10.240.0.2${i} \
-    --scopes compute-rw,storage-ro,service-management,service-control,logging-write,monitoring \
-    --subnet kubernetes \
-    --tags kubernetes-the-hard-way,worker
+    --tags kubernetes-the-hard-way,worker,windows
 done
 ```
 
@@ -212,7 +180,7 @@ worker-1      us-west1-b  n1-standard-2               10.240.0.21  XX.XXX.XX.XXX
 worker-2      us-west1-b  n1-standard-2               10.240.0.22  XX.XXX.XXX.XXX  RUNNING
 ```
 
-## Configuring SSH Access
+## Configuring SSH Access to Linux instances
 
 SSH will be used to configure the controller and Linux worker instances. When connecting to compute instances for the first time SSH keys will be generated for you and stored in the project or instance metadata as describe in the [connecting to instances](https://cloud.google.com/compute/docs/instances/connecting-to-instance) documentation.
 
@@ -280,8 +248,33 @@ logout
 Connection to XX.XXX.XXX.XXX closed
 ```
 
-## Configuring RDP Access
+## Configuring Access to Windows instances
 
-TODO: reset Windows passwords and configure RDP client here.
+This tutorial only uses PowerShell commands and a GUI is not required. This tutorial targets the latest Windows Server semi-annual release (version 1803 as of this writing) and so a GUI is not supported anyway.
+
+If you are running a Windows machine locally, connecting to Windows instances
+via [remote PowerShell
+(`Enter-PSSession`)](https://cloud.google.com/compute/docs/instances/connecting-to-instance#windows_cli)
+is probably your best bet. If you're going through this tutorial on a Linux
+machine, you can try Microsoft's [PowerShell Remoting Over
+SSH](https://docs.microsoft.com/en-us/powershell/scripting/core-powershell/ssh-remoting-in-powershell-core?view=powershell-6#setup-on-windows-machine)
+steps if you're brave, or you can connect to your instances via [Remote Desktop
+(RDP)](https://cloud.google.com/compute/docs/instances/connecting-to-instance#windows_gui)
+if you're not.
+
+For each Windows worker you'll need to first [generate a Windows
+password](https://cloud.google.com/compute/docs/instances/windows/creating-passwords-for-windows-instances).
+Run the following command:
+
+```
+for i in 1 2; do
+  gcloud compute reset-windows-password worker-${i} --quiet
+done
+```
+
+This will emit a password for each Windows instance - save it for use with your
+remote PowerShell session, or copy it into a saved connection in your RDP
+client. Initiate a connection to make sure that your PowerShell or RDP client
+and your network and firewalls are configured correctly.
 
 Next: [Provisioning a CA and Generating TLS Certificates](04-certificate-authority.md)

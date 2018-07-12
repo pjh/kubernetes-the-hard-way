@@ -1,10 +1,17 @@
 # Prerequisites
 
+## Where / how to run this tutorial
+
+This tutorial was written as if you would be running its commands on your local
+Linux machine. The commands would also probably work in a separate Linux "dev"
+VM running in the cloud, or with some adaptation they could probably be run on a
+local Windows machine too.
+
 ## Google Cloud Platform
 
 This tutorial leverages the [Google Cloud Platform](https://cloud.google.com/) to streamline provisioning of the compute infrastructure required to bootstrap a Kubernetes cluster from the ground up. [Sign up](https://cloud.google.com/free/) for $300 in free credits.
 
-[Estimated cost](https://cloud.google.com/products/calculator/#id=78df6ced-9c50-48f8-a670-bc5003f2ddaa) to run this tutorial: $0.22 per hour ($5.39 per day).
+[Estimated cost](https://cloud.google.com/products/calculator/#id=78df6ced-9c50-48f8-a670-bc5003f2ddaa) to run this tutorial: $0.22 per hour ($5.39 per day). (NOTE: with the addition of Windows nodes the cost will be significantly more.)
 
 > The compute resources required for this tutorial exceed the Google Cloud Platform free tier.
 

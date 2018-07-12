@@ -299,4 +299,4 @@ NAME       STATUS    ROLES     AGE       VERSION
 worker-0   Ready     <none>    20s       v1.10.5
 ```
 
-Next: [Configuring kubectl for Remote Access](10-configuring-kubectl.md)
+Next: [Bootstrapping the Windows Worker Nodes](09b-bootstrapping-windows-workers.md)
