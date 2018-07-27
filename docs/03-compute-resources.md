@@ -131,7 +131,7 @@ for i in 0; do
     --image-family ubuntu-1804-lts \
     --image-project ubuntu-os-cloud \
     --machine-type n1-standard-1 \
-    --metadata pod-cidr=10.200.${i}.0/24 \
+    --metadata pod-cidr=10.200.${i}.0/24,serial-port-enable=1 \
     --private-network-ip 10.240.0.2${i} \
     --scopes compute-rw,storage-ro,service-management,service-control,logging-write,monitoring \
     --subnet kubernetes \
@@ -139,20 +139,16 @@ for i in 0; do
 done
 ```
 
-TODO: eventually will just want to use ```--image-family
-windows-1803-core-for-containers --image-project windows-cloud``` here:
-
 ```
 for i in 1 2; do
   gcloud compute instances create worker-${i} \
     --async \
     --boot-disk-size 200GB \
     --can-ip-forward \
-    --image windows-server-1803-dc-core-for-containers-v1526689277 \
-    --image-project peterhornyack-prod \
+    --image-family windows-1803-core-for-containers \
+    --image-project windows-cloud \
     --machine-type n1-standard-2 \
-    --metadata pod-cidr=10.200.${i}.0/24 \
-    --metadata serial-port-enable=1 \
+    --metadata pod-cidr=10.200.${i}.0/24,serial-port-enable=1 \
     --private-network-ip 10.240.0.2${i} \
     --scopes compute-rw,storage-ro,service-management,service-control,logging-write,monitoring \
     --subnet kubernetes \
