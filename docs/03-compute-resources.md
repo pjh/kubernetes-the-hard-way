@@ -139,6 +139,8 @@ for i in 0; do
 done
 ```
 
+TODO: make the 1709, 1803 version tag a constant / metadata tag!
+
 ```
 for i in 1 2; do
   gcloud compute instances create worker-${i} \

@@ -68,14 +68,27 @@ Runtime: go1.6
 
 > The cfssljson command line utility does not provide a way to print its version.
 
+## Determine the Kubernetes version
+
+To ensure a consistent Kubernetes version in this guide we'll set a
+project-level metadata key. Check the [Kubernetes
+Releases](https://github.com/kubernetes/kubernetes/releases) page to find the
+latest Kubernetes release or use your preferred version:
+
+```
+gcloud compute project-info add-metadata --metadata=k8s-version=v1.10.5
+```
+
 ## Install kubectl
 
-The `kubectl` command line utility is used to interact with the Kubernetes API Server. Download and install `kubectl` from the official release binaries:
+The `kubectl` command line utility is used to interact with the Kubernetes API
+Server. Download and install `kubectl` from the official release binaries:
 
 ### OS X
 
 ```
-curl -o kubectl https://storage.googleapis.com/kubernetes-release/release/v1.10.5/bin/darwin/amd64/kubectl
+K8S_VERSION=`gcloud compute project-info describe --format='value(commonInstanceMetadata.items.k8s-version)'`
+curl -o kubectl https://storage.googleapis.com/kubernetes-release/release/${K8S_VERSION}/bin/darwin/amd64/kubectl
 ```
 
 ```
@@ -89,20 +102,17 @@ sudo mv kubectl /usr/local/bin/
 ### Linux
 
 ```
-wget https://storage.googleapis.com/kubernetes-release/release/v1.10.5/bin/linux/amd64/kubectl
-```
-
-```
-chmod +x kubectl
-```
-
-```
-sudo mv kubectl /usr/local/bin/
+{
+  K8S_VERSION=`gcloud compute project-info describe --format='value(commonInstanceMetadata.items.k8s-version)'`
+  wget https://storage.googleapis.com/kubernetes-release/release/${K8S_VERSION}/bin/linux/amd64/kubectl
+  chmod +x kubectl
+  sudo mv kubectl /usr/local/bin/
+}
 ```
 
 ### Verification
 
-Verify `kubectl` version 1.10.5 or higher is installed:
+Verify `kubectl` version `${K8S_VERSION}` or higher is installed:
 
 ```
 kubectl version --client
@@ -111,7 +121,7 @@ kubectl version --client
 > output
 
 ```
-Client Version: version.Info{Major:"1", Minor:"10", GitVersion:"v1.10.5", GitCommit:"81753b10df112992bf51bbc2c2f85208aad78335", GitTreeState:"clean", BuildDate:"2018-04-27T09:22:21Z", GoVersion:"go1.9.3", Compiler:"gc", Platform:"linux/amd64"}
+Client Version: version.Info{Major:"1", Minor:"10", GitVersion:"v1.10.5", GitCommit:"32ac1c9073b132b8ba18aa830f46b77dcceb0723", GitTreeState:"clean", BuildDate:"2018-06-21T11:46:00Z", GoVersion:"go1.9.3", Compiler:"gc", Platform:"linux/amd64"}
 ```
 
 Next: [Provisioning Compute Resources](03-compute-resources.md)

@@ -7,44 +7,47 @@ plugins](https://github.com/containernetworking/cni),
 [kubelet](https://kubernetes.io/docs/admin/kubelet), and
 [kube-proxy](https://kubernetes.io/docs/concepts/cluster-administration/proxies).
 
-Docker should be preinstalled if you're using the Windows-for-containers GCE
-image. If you're using a different Windows image, follow [these
+Docker should be preinstalled on your Windows instances if you created them
+using the `windows-1803-core-for-containers` image as instructed. If you're
+using a different Windows image, follow [these
 steps](https://cloud.google.com/compute/docs/containers/#install_docker) to
 install Docker and configure some GCE-specific workarounds.
 
 ## Prerequisites
 
-The commands in this lab must be run on each worker instance: `worker-1` and
-`worker-2`. RDP to each instance using your RDP client as described previously,
-then run the commands below in a PowerShell session.
+The commands in this lab must be run on each Windows worker instance: `worker-1`
+and `worker-2`. RDP to each instance using your RDP client as described
+previously, then run the commands below in a PowerShell session.
 
-TODO: figure out how to invoke these commands remotely.
-
-### Running commands in parallel with tmux
-
-[tmux](https://github.com/tmux/tmux/wiki) can be used to run commands on multiple compute instances at the same time. See the [Running commands in parallel with tmux](01-prerequisites.md#running-commands-in-parallel-with-tmux) section in the Prerequisites lab.
-
-## Provisioning a Kubernetes Worker Node
-
-## Install additional software
-
-```
-Install-Package -Force 7Zip4Powershell
-```
-
-Disable the Windows firewall:
+Disable the Windows firewall (NOTE: this is currently recommended while
+Kubernetes Windows support is beta, but should not be done for production
+clusters):
 
 ```
 Set-NetFirewallProfile -Profile Domain, Public, Private -Enabled False
 ```
 
-Install VS Code for editing text files (instead of notepad):
+### Install additional software
+
+[Chocolatey](https://chocolatey.org/about) is a package manager for Windows.
+Follow the [Installing
+Chocolatey](https://chocolatey.org/install#installing-chocolatey) steps to
+install it using PowerShell.
+
+Once Chocolatey is installed, use it to install Git, 7Zip and Notepad++:
+
 ```
-Invoke-WebRequest https://raw.githubusercontent.com/PowerShell/vscode-powershell/master/scripts/Install-VSCode.ps1 -OutFile C:\Install-VSCode.ps1
-.\Install-VSCode.ps1
-[Environment]::SetEnvironmentVariable("Path", $env:Path + ";C:\Program Files\Microsoft VS Code", [EnvironmentVariableTarget]::Machine)
-# Need to restart to take effect though :(
-& 'C:\Program Files\Microsoft VS Code\Code.exe' C:\file\to\edit.txt
+choco install -y git 7zip notepadplusplus
+```
+
+After installing this software, a reboot is recommended to ensure that the
+executables will be on your PATH for all your PowerShell instances:
+
+TODO: set up permanent environment variables at this step, so they'll be
+available to all subsequent PowerShell instances?
+
+```
+Restart-Computer -Force
 ```
 
 ### Create the "pause image"
@@ -54,27 +57,23 @@ steps](https://github.com/MicrosoftDocs/Virtualization-Documentation/blob/live/v
 are copied from Microsoft's Virtualization-Documentation, with some
 modifications.
 
-```
-mkdir C:\k\pauseimage
-cd C:\k\pauseimage
-New-Item -ItemType file Dockerfile
-notepad.exe Dockerfile
-```
-
-Paste these contents into the Dockerfile, then save and close.
+The "pause image" simply runs the ping command indefinitely. Create a Dockerfile
+for it:
 
 ```
-FROM microsoft/nanoserver:1803
-
-CMD cmd /c ping -t localhost
+$k8sDir = "C:\k8s_hardway"
+$pauseImage = "${k8sDir}\pauseimage"
+mkdir ${PAUSE_IMAGE}
+New-Item -ItemType file ${pauseImage}\Dockerfile
+Set-Content ${pauseImage}\Dockerfile "FROM microsoft/nanoserver:1803`n`nCMD cmd /c ping -t localhost"
 ```
 
 TODO: make the 1709, 1803 version tag a constant / metadata tag.
 
-TODO: figure out how to write this content to the Dockerfile from the command line.
+Then build the container image:
 
 ```
-docker build -t kubeletwin/pause .
+docker build -t kubeletwin/pause ${pauseImage}
 ```
 
 After the container builds, run the following command to confirm that it works:
@@ -86,7 +85,7 @@ docker run kubeletwin/pause
 After a short delay you should see continuous pings to and replies from ::1.
 Press `Ctrl-C` to break out of the container.
 
-### Download and Install Worker Binaries
+### Download and Install Kubernetes Binaries
 
 [These
 steps](https://github.com/MicrosoftDocs/Virtualization-Documentation/blob/live/virtualization/windowscontainers/kubernetes/getting-started-kubernetes-windows.md#downloading-binaries)
@@ -94,43 +93,51 @@ are borrowed from Microsoft's Virtualization-Documentation, with some
 modifications.
 
 Run the following commands to download the Kubernetes node binaries for the
-release of your choice. These commands use
-[1.10.5](https://github.com/kubernetes/kubernetes/blob/master/CHANGELOG-1.10.md#downloads-for-v1105).
-You can use the [Google Cloud Storage
-browser](https://console.cloud.google.com/storage/browser/kubernetes-release/release/v1.10.5/bin/windows/amd64/)
-to find the appropriate path for other releases.
-
-TODO: is kubeadm required?
+version we specified earlier as a project-level metadata value.
 
 ```
-mkdir C:\k\node
-cd C:\k\node
+$k8sVersion = "$(gcloud compute project-info describe `
+  --format='value(commonInstanceMetadata.items.k8s-version)')"
+$nodeDir = "${k8sDir}\node"
+
+mkdir ${nodeDir}
 
 # Disable progress bar to dramatically increase download speed.
 $ProgressPreference = 'SilentlyContinue'
-Invoke-WebRequest https://storage.googleapis.com/kubernetes-release/release/v1.10.5/bin/windows/amd64/kubeadm.exe -OutFile kubeadm.exe
-Invoke-WebRequest https://storage.googleapis.com/kubernetes-release/release/v1.10.5/bin/windows/amd64/kubectl.exe -OutFile kubectl.exe
-Invoke-WebRequest https://storage.googleapis.com/kubernetes-release/release/v1.10.5/bin/windows/amd64/kubelet.exe -OutFile kubelet.exe
-Invoke-WebRequest https://storage.googleapis.com/kubernetes-release/release/v1.10.5/bin/windows/amd64/kube-proxy.exe -OutFile kube-proxy.exe
+Invoke-WebRequest `
+  https://storage.googleapis.com/kubernetes-release/release/${k8sVersion}/bin/windows/amd64/kubectl.exe `
+  -OutFile ${nodeDir}\kubectl.exe
+Invoke-WebRequest `
+  https://storage.googleapis.com/kubernetes-release/release/${k8sVersion}/bin/windows/amd64/kubelet.exe `
+  -OutFile ${nodeDir}\kubelet.exe
+Invoke-WebRequest `
+  https://storage.googleapis.com/kubernetes-release/release/${k8sVersion}/bin/windows/amd64/kube-proxy.exe `
+  -OutFile ${nodeDir}\kube-proxy.exe
 ```
 
-TODO: try containerd and see if it works?
+TODO: try containerd and see if it works.
 
 Add the node binary directory to your path. Note that the updated path will not
 take effect in new terminals until after a reboot.
 
 ```
-$env:Path += ";C:\k\node"
-[Environment]::SetEnvironmentVariable("Path", $env:Path + ";C:\k\node", [EnvironmentVariableTarget]::Machine)
+$env:Path += ";${nodeDir}"
+[Environment]::SetEnvironmentVariable("Path", $env:Path + ";${nodeDir}", `
+  [EnvironmentVariableTarget]::Machine)
 ```
 
 ### Create the Kubernetes config
 
-Update the KUBECONFIG environment variable to point to the kubeconfig that we created previously.
+Update the KUBECONFIG environment variable to point to the kubeconfig that we
+created previously.
+
+TODO: who/what uses this? Can I skip it? There are different kubeconfigs for
+kubelet and kube-proxy, if I need to use one here which one should it be?
 
 ```
-$env:KUBECONFIG="C:\k\kube-proxy.kubeconfig"
-[Environment]::SetEnvironmentVariable("KUBECONFIG", "C:\k\kube-proxy.kubeconfig", [EnvironmentVariableTarget]::User)
+$env:KUBECONFIG="${k8sDir}\$(hostname).kubeconfig"
+[Environment]::SetEnvironmentVariable("KUBECONFIG", `
+  "${k8sDir}\$(hostname).kubeconfig", [EnvironmentVariableTarget]::User)
 ```
 
 (This config can also be specified using the `--kubeconfig` flag for `kubectl`).
@@ -152,13 +159,13 @@ kubectl config view
 > contexts:
 > - context:
 >     cluster: kubernetes-the-hard-way
->     user: system:kube-proxy
+>     user: system:node:wworker-2
 >   name: default
 > current-context: default
 > kind: Config
 > preferences: {}
 > users:
-> - name: system:kube-proxy
+> - name: system:node:wworker-2
 >   user:
 >     client-certificate-data: REDACTED
 >     client-key-data: REDACTED
@@ -179,7 +186,7 @@ previous labs.
 
 TODO: at this point the Microsoft guide has these
 [contents](https://github.com/Microsoft/SDN/tree/master/Kubernetes/windows)
-under C:\k:
+under ${k8sDir}:
 
  * A bunch of .ps1 scripts that I probably don't need.
  * cni/wincni.exe
@@ -195,39 +202,43 @@ pretty similar to how the Linux worker node is set up.
 The wincni repository is [here](https://github.com/Microsoft/SDN/tree/master/Kubernetes/wincni), but it's unclear if/how that code can be built (just a `go build` command?). For now, we'll use the prebuilt wincni.exe binary:
 
 ```
-mkdir C:\k\cni
+$cniDir = "${k8sDir}\cni"
+mkdir ${cniDir}
 
-# Need to specify TLS version 1.2 since GitHub API requires it
-[Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
-Invoke-WebRequest https://github.com/Microsoft/SDN/raw/master/Kubernetes/windows/cni/wincni.exe -OutFile C:\k\cni\wincni.exe
+# Need to specify TLS version 1.2 since GitHub API requires it; without changing
+# the SecurityProtocol, Invoke-WebRequest will fail with "The request was
+# aborted: Could not create SSL/TLS secure channel."
+#
+# "-bor" in this command is for bitwise-OR:
+[Net.ServicePointManager]::SecurityProtocol = `
+  [Net.ServicePointManager]::SecurityProtocol `
+  -bor [Net.SecurityProtocolType]::Tls12
+
+Invoke-WebRequest `
+  https://github.com/Microsoft/SDN/raw/master/Kubernetes/windows/cni/wincni.exe `
+  -OutFile ${cniDir}\wincni.exe
 ```
 
-TODO: what does -bor do? Seems to work at least, resolves error
-`Invoke-WebRequest : The request was aborted: Could not create SSL/TLS secure
-channel.`.
+Now create the configuration file for "l2bridge" mode for the CNI plugin. (NOTE:
+if you need to edit the configuration or correct a mistake you can open the file
+using `notepad++.exe`.)
 
 ```
-mkdir C:\k\cni\config
-New-Item -ItemType file C:\k\cni\config\l2bridge.conf
-notepad.exe C:\k\cni\config\l2bridge.conf
-```
+$podCidr = "$([System.Text.Encoding]::ASCII.GetString((`
+  Invoke-WebRequest -UseBasicParsing -H @{'Metadata-Flavor' = 'Google'} `
+  http://metadata.google.internal/computeMetadata/v1/instance/attributes/pod-cidr).Content))"
 
-TODO: figure out how to insert contents directly from powershell. Look at
-previous tests.
+# For Windows nodes the pod gateway IP address is the .1 address in the pod
+# CIDR for the host, but from inside containers it's the .2 address.
+$podGateway = ${podCidr}.substring(0, ${podCidr}.lastIndexOf('.')) + '.1'
+$podEndpointGateway = ${podCidr}.substring(0, ${podCidr}.lastIndexOf('.')) + '.2'
 
-TODO: see 09a-sidebar.md for debugging I did at this point.
+mkdir ${cniDir}\config
+$l2bridgeConf = "${cniDir}\config\l2bridge.conf"
+New-Item -ItemType file ${l2bridgeConf}
 
-TODO: figure out how to get $podCidr from metadata server and then use /
-transform it for the steps below. e.g.:
-```
-POD_CIDR=$(curl -s -H "Metadata-Flavor: Google" \
-  http://metadata.google.internal/computeMetadata/v1/instance/attributes/pod-cidr)
-```
-
-Paste the following contents into the file (for worker-1!):
-
-```
-{
+Set-Content ${l2bridgeConf} `
+  '{
     "cniVersion":  "0.2.0",
     "name":  "l2bridge",
     "type":  "wincni.exe",
@@ -237,10 +248,10 @@ Paste the following contents into the file (for worker-1!):
     },
     "ipam":  {
         "environment":  "azure",
-        "subnet":  "10.200.1.0/24",
+        "subnet":  "POD_CIDR",
         "routes":  [
             {
-                "GW":  "10.200.1.2"
+                "GW":  "POD_ENDPOINT_GW"
             }
         ]
     },
@@ -281,8 +292,13 @@ Paste the following contents into the file (for worker-1!):
             }
         }
     ]
-}
+}'.replace('POD_CIDR', ${podCidr}).replace('POD_ENDPOINT_GW', ${podEndpointGateway})
 ```
+
+TODO: the 10.240.0.23 address needs adjusting, I think: should be e.g.
+10.240.0.21, 10.240.0.22 for worker-1, worker-2. Right?
+
+NOTE: see troubleshooting/09a-sidebar.md for debugging I did at this point.
 
 Explanation of the fields in the CNI config:
 
@@ -294,16 +310,16 @@ Explanation of the fields in the CNI config:
   instance it is also Ethernet.
 * capabilities.portMappings: unsure.
 * ipam.environment: obviously we're not using azure, not sure it matters.
-* ipam.subnet: the $podCIDR - 192.168.1.0/24 in Microsoft steps, 10.200.N.0/24
+* ipam.subnet: the $podCidr - 192.168.1.0/24 in Microsoft steps, 10.200.N.0/24
   for worker-N in these steps.
     - Get using curl from metadata server!
-* ipam.routes.GW: the .2 address in the $podCIDR (Windows nodes use .2 for the
+* ipam.routes.GW: the .2 address in the $podCidr (Windows nodes use .2 for the
   gateway due to a platform limitation). So, for worker-N in these steps, should
   be 10.200.N.2.
     - ipam probably happens on a per-pod basis, and containers in the pod
       communicate with the .2 address for the gateway (whereas the host side
       of the gateway is the .1), I think.
-* dns.Nameservers: contains $KubeDnsServiceIp. For Microsoft steps this is currently
+* dns.Nameservers: contains $kubeDnsServiceIp. For Microsoft steps this is currently
   hardcoded to 11.0.0.10.
     - In these steps it seems to be "10.32.0.10" (see kubelet-config.yaml for Linux
       node). 10.32.0.0/24 is the service-cluster-ip-range (see lab 8), .10 seems
@@ -329,18 +345,14 @@ Explanation of the fields in the CNI config:
       worker-3 node I got "10.240.0.23/32" for these GCE steps.
 
 TODO: understand what the "management" network is/does and how to configure it
-appropriately. See article that Alain sent.
+appropriately. See article.
 
 Then, we need to invoke some commands to set up the Windows node networking.
 First, get the Microsoft helper scripts:
 
 ```
-cd C:\k
-Invoke-WebRequest https://github.com/Microsoft/SDN/archive/master.zip -OutFile C:\k\Microsoft-SDN-master.zip
-Expand-Archive C:\k\Microsoft-SDN-master.zip -DestinationPath C:\k
-rm C:\k\Microsoft-SDN-master.zip
-mv C:\k\SDN-master\Kubernetes\windows\ C:\k\Microsoft-SDN-scripts
-rm -Recurse -Force C:\k\SDN-master\
+git clone https://github.com/Microsoft/SDN.git ${k8sDir}\SDN
+$sdnScripts = "${k8sDir}\SDN\Kubernetes\windows"
 ```
 
 TODO: instead of using these unsupported scripts that Microsoft ad-hoc released,
@@ -351,18 +363,17 @@ Then run the following commands to configure the Host Networking Service (HNS).
 Note that your RDP session may be interrupted when you invoke these commands.
 
 ```
-$podCidr = "10.200.1.0/24"
-$podGateway = "10.200.1.1"
-$podEndpointGateway = "10.200.1.2"
 $hnsNetworkName = "l2bridge"
 $endpointName = "cbr0"
 $vnicName = "vEthernet ($endpointName)"
 
-Import-Module C:\k\Microsoft-SDN-scripts\hns.psm1
+Import-Module ${sdnScripts}\hns.psm1
 
-New-HNSNetwork -Type "L2Bridge" -AddressPrefix $podCidr -Gateway $podGateway -Name $hnsNetworkName -Verbose
+New-HNSNetwork -Type "L2Bridge" -AddressPrefix $podCidr -Gateway $podGateway `
+  -Name $hnsNetworkName -Verbose
 $hnsNetwork = Get-HnsNetwork | ? Type -EQ "L2Bridge"
-$hnsEndpoint = New-HnsEndpoint -NetworkId $hnsNetwork.Id -Name $endpointName -IPAddress $podEndpointGateway -Gateway "0.0.0.0" -Verbose
+$hnsEndpoint = New-HnsEndpoint -NetworkId $hnsNetwork.Id -Name $endpointName `
+  -IPAddress $podEndpointGateway -Gateway "0.0.0.0" -Verbose
 Attach-HnsHostEndpoint -EndpointID $hnsEndpoint.Id -CompartmentID 1 -Verbose
 netsh interface ipv4 set interface "$vnicName" forwarding=enabled
 Get-HNSPolicyList | Remove-HnsPolicyList
@@ -374,29 +385,24 @@ TODO: also not configuring here: loopback network?
 
 ### Configure the Kubelet
 
-TODO: skipped these steps on Windows node for now since I enabled anonymous /
-AlwaysAllow authentication. Where should these files be placed on Windows?
+TODO: C:\k8s_hardway still has these files:
+  ca.pem
+  kube-proxy.kubeconfig
+  worker-2-key.pem
+  worker-2.kubeconfig
+  worker-2.pem
+Just leave them where they are for now, but consider moving to a better place?
+
+Create the `kubelet-config.yaml` configuration file (Note: for authentication
+set anonymous to true instead of false since I skipped RBAC setup (webhook). For
+authorization set mode to AlwaysAllow instead of Webhook
+(https://github.com/kubernetes/kubernetes/blob/cd78e999f9aade259c177c1698129311c83aa7d3/pkg/kubeapiserver/authorizer/modes/modes.go#L30)).
 
 ```
-{
-  sudo mv ${HOSTNAME}-key.pem ${HOSTNAME}.pem /var/lib/kubelet/
-  sudo mv ${HOSTNAME}.kubeconfig /var/lib/kubelet/kubeconfig
-  sudo mv ca.pem /var/lib/kubernetes/
-}
-```
+$kubeletConfig = "${k8sDir}\kubelet-config.yaml"
 
-Create the `kubelet-config.yaml` configuration file:
-
-TODO: do other Windows demos even have a "kubelet-config"??
-
-TODO: for authentication set anonymous to true instead of false since I skipped
-RBAC setup (webhook). For authorization set mode to AlwaysAllow instead of
-Webhook
-(https://github.com/kubernetes/kubernetes/blob/cd78e999f9aade259c177c1698129311c83aa7d3/pkg/kubeapiserver/authorizer/modes/modes.go#L30).
-
-```
-cat <<EOF | sudo tee /var/lib/kubelet/kubelet-config.yaml
-kind: KubeletConfiguration
+Set-Content ${kubeletConfig} `
+'kind: KubeletConfiguration
 apiVersion: kubelet.config.k8s.io/v1beta1
 authentication:
   anonymous:
@@ -404,22 +410,22 @@ authentication:
   webhook:
     enabled: true
   x509:
-    clientCAFile: "/var/lib/kubernetes/ca.pem"
+    clientCAFile: "K8S_DIR\ca.pem"
 authorization:
   mode: AlwaysAllow
 clusterDomain: "cluster.local"
 clusterDNS:
   - "10.32.0.10"
-podCIDR: "${POD_CIDR}"
+podCIDR: "POD_CIDR"
 runtimeRequestTimeout: "15m"
-tlsCertFile: "/var/lib/kubelet/${HOSTNAME}.pem"
-tlsPrivateKeyFile: "/var/lib/kubelet/${HOSTNAME}-key.pem"
-EOF
+tlsCertFile: "K8S_DIR\HOSTNAME.pem"
+tlsPrivateKeyFile: "K8S_DIR\HOSTNAME-key.pem"'.replace('K8S_DIR', ${k8sDir}).replace('POD_CIDR', ${podCidr}).replace('HOSTNAME', $(hostname))
 ```
 
 ### Configure the Kubernetes Proxy
 
-TODO: skipped these steps for now. Where do these files go on a Windows node?
+TODO: skipped these steps for now. Create a kube-proxy-config on the Windows
+node and move the kubeproxy command-line flags from below to here.
 
 ```
 sudo mv kube-proxy.kubeconfig /var/lib/kube-proxy/kubeconfig
@@ -440,20 +446,48 @@ EOF
 
 ### Start the Worker Services
 
-
 Finally, open a separate powershell window and start the kubelet:
 
+TODO: make $k8sDir / $nodeDir part of the environment that sticks across
+powershells!
+  Also: $env:KUBECONFIG ?
+
 ```
-$KubeDnsServiceIp = "10.32.0.10"
-C:\k\node\kubelet.exe --hostname-override=$(hostname) --v=6 `
+$k8sDir = "C:\k8s_hardway"
+$nodeDir = "${k8sDir}\node"
+$cniDir = "${k8sDir}\cni"
+$kubeletConfig = "${k8sDir}\kubelet-config.yaml"
+$kubeDnsServiceIp = "10.32.0.10"
+
+& ${nodeDir}\kubelet.exe --hostname-override=$(hostname) --v=6 `
   --pod-infra-container-image=kubeletwin/pause --resolv-conf="" `
-  --allow-privileged=true --enable-debugging-handlers `
-  --cluster-dns=$KubeDnsServiceIp --cluster-domain=cluster.local `
-  --kubeconfig=C:\k\kube-proxy.kubeconfig --hairpin-mode=promiscuous-bridge `
+  --allow-privileged=true --config=${kubeletConfig} `
+  --enable-debugging-handlers `
+  --kubeconfig=${k8sDir}\$(hostname).kubeconfig --hairpin-mode=promiscuous-bridge `
   --image-pull-progress-deadline=20m --cgroups-per-qos=false `
-  --enforce-node-allocatable="" --network-plugin=cni --cni-bin-dir="C:\k\cni" `
-  --cni-conf-dir "C:\k\cni\config"
+  --enforce-node-allocatable="" --network-plugin=cni --cni-bin-dir="${cniDir}" `
+  --cni-conf-dir "${cniDir}\config" --register-node=true
 ```
+
+Note: removed these command-line flags since they are now part of
+kubelet-config.yaml:
+*   --cluster-dns=${kubeDnsServiceIp}
+*   --cluster-domain=cluster.local
+
+Note: the Linux worker's kubelet is also invoked with these flags, all of which
+are either already present above or which should be omitted for the Windows
+kubelet:
+*   --container-runtime=remote \\
+*   --container-runtime-endpoint=unix:///var/run/containerd/containerd.sock \\
+*   --image-pull-progress-deadline=2m \\
+*   --kubeconfig=/var/lib/kubelet/kubeconfig \\
+*   --network-plugin=cni \\
+*   --register-node=true \\
+*   --v=2
+
+TODO: move the rest of the kubelet command-line flags into kubelet-config.yaml.
+See https://kubernetes.io/docs/tasks/administer-cluster/kubelet-config-file/ for
+the flags that are supported.
 
 Note: to use Hyper-V isolation for the pods add
 `--feature-gates=HyperVContainer=true`.
@@ -461,17 +495,39 @@ Note: to use Hyper-V isolation for the pods add
 Wait a few seconds, then open a new powershell window and then start kube-proxy:
 
 ```
+$k8sDir = "C:\k8s_hardway"
+$nodeDir = "${k8sDir}\node"
 $hnsNetworkName = "l2bridge"
 $env:KUBE_NETWORK = $hnsNetworkName
-C:\k\node\kube-proxy.exe --v=4 --proxy-mode=kernelspace --hostname-override=$(hostname) --kubeconfig=C:\k\kube-proxy.kubeconfig
+
+& ${nodeDir}\kube-proxy.exe --v=4 --proxy-mode=kernelspace `
+  --hostname-override=$(hostname) --kubeconfig=${k8sDir}\kube-proxy.kubeconfig `
+  --cluster-cidr="10.200.0.0/16"
 ```
+
+TODO: added --cluster-cidr flag to match Linux kube-proxy-config.yaml. Does the
+Windows kube-proxy still work? Seems to.
 
 After a short delay the worker nodes should successfully join the cluster:
 
-> PS C:\k> kubectl get nodes
-> NAME            STATUS    ROLES     AGE       VERSION
-> worker-0        Ready     <none>    5d        v1.10.5
-> worker-1        Ready     <none>    1m        v1.10.5
+```
+$k8sDir = "C:\k8s_hardway"
+$nodeDir = "${k8sDir}\node"
+& $k8sDir\node\kubectl get nodes --kubeconfig "${k8sDir}\kube-proxy.kubeconfig"
+```
+
+> Output:
+
+```
+NAME            STATUS    ROLES     AGE       VERSION
+worker-0        Ready     <none>    1h        v1.10.5
+worker-1        Ready     <none>    1m        v1.10.5
+worker-2        Ready     <none>    1m        v1.10.5
+```
+
+NOTE: see troubleshooting/windows-worker-cluster-join-RBAC.md for notes about
+issues I was having with getting Windows nodes to join when the apiserver was
+started with Node,RBAC authorization.
 
 ## Verification
 
@@ -488,9 +544,9 @@ gcloud compute ssh controller-0 \
 
 ```
 NAME            STATUS    ROLES     AGE       VERSION
-worker-0        Ready     <none>    20m       v1.10.5
-worker-1        Ready     <none>    2m        v1.10.5
-worker-2        Ready     <none>    2m        v1.10.5
+worker-0        Ready     <none>    1h        v1.10.5
+worker-1        Ready     <none>    1m        v1.10.5
+worker-2        Ready     <none>    1m        v1.10.5
 ```
 
 Next: [Configuring kubectl for Remote Access](10-configuring-kubectl.md)

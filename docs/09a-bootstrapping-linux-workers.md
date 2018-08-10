@@ -30,15 +30,16 @@ Install the OS dependencies:
 ### Download and Install Worker Binaries
 
 ```
+K8S_VERSION=`gcloud compute project-info describe --format='value(commonInstanceMetadata.items.k8s-version)'`
 wget -q --show-progress --https-only --timestamping \
   https://github.com/kubernetes-incubator/cri-tools/releases/download/v1.0.0-beta.0/crictl-v1.0.0-beta.0-linux-amd64.tar.gz \
   https://storage.googleapis.com/kubernetes-the-hard-way/runsc \
   https://github.com/opencontainers/runc/releases/download/v1.0.0-rc5/runc.amd64 \
   https://github.com/containernetworking/plugins/releases/download/v0.6.0/cni-plugins-amd64-v0.6.0.tgz \
   https://github.com/containerd/containerd/releases/download/v1.1.0/containerd-1.1.0.linux-amd64.tar.gz \
-  https://storage.googleapis.com/kubernetes-release/release/v1.10.5/bin/linux/amd64/kubectl \
-  https://storage.googleapis.com/kubernetes-release/release/v1.10.5/bin/linux/amd64/kube-proxy \
-  https://storage.googleapis.com/kubernetes-release/release/v1.10.5/bin/linux/amd64/kubelet
+  https://storage.googleapis.com/kubernetes-release/release/${K8S_VERSION}/bin/linux/amd64/kubectl \
+  https://storage.googleapis.com/kubernetes-release/release/${K8S_VERSION}/bin/linux/amd64/kube-proxy \
+  https://storage.googleapis.com/kubernetes-release/release/${K8S_VERSION}/bin/linux/amd64/kubelet
 ```
 
 Create the installation directories:
@@ -279,11 +280,14 @@ EOF
 }
 ```
 
-> Remember to run the above commands on each worker node: `worker-0`.
+> Remember to run the above commands on each Linux worker node: `worker-0`.
 
 ## Verification
 
 > The compute instances created in this tutorial will not have permission to complete this section. Run the following commands from the same machine used to create the compute instances.
+
+Note: if you see errors in the output of these commands, run `journalctl` on the
+worker node to see the kubelet logs.
 
 List the registered Kubernetes nodes:
 
