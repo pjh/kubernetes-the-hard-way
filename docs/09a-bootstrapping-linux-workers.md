@@ -10,10 +10,6 @@ The commands in this lab must be run on each worker instance: `worker-0`. Login 
 gcloud compute ssh worker-0
 ```
 
-### Running commands in parallel with tmux
-
-[tmux](https://github.com/tmux/tmux/wiki) can be used to run commands on multiple compute instances at the same time. See the [Running commands in parallel with tmux](01-prerequisites.md#running-commands-in-parallel-with-tmux) section in the Prerequisites lab.
-
 ## Provisioning a Kubernetes Worker Node
 
 Install the OS dependencies:
@@ -174,12 +170,9 @@ EOF
 Create the `kubelet-config.yaml` configuration file:
 
 TODO: for authentication set anonymous to true instead of false since I skipped
-RBAC setup (webhook). For authorization set mode to AlwaysAllow instead of
-Webhook
+RBAC setup (Webhook) when setting up controllers. For authorization set mode to
+AlwaysAllow instead of Webhook
 (https://github.com/kubernetes/kubernetes/blob/cd78e999f9aade259c177c1698129311c83aa7d3/pkg/kubeapiserver/authorizer/modes/modes.go#L30).
-
-TODO: examine the kubelet config used by Windows demos to see what kind of auth
-they use.
 
 ```
 cat <<EOF | sudo tee /var/lib/kubelet/kubelet-config.yaml
@@ -223,7 +216,7 @@ ExecStart=/usr/local/bin/kubelet \\
   --kubeconfig=/var/lib/kubelet/kubeconfig \\
   --network-plugin=cni \\
   --register-node=true \\
-  --v=2
+  --v=6
 Restart=on-failure
 RestartSec=5
 
@@ -280,8 +273,6 @@ EOF
 }
 ```
 
-> Remember to run the above commands on each Linux worker node: `worker-0`.
-
 ## Verification
 
 > The compute instances created in this tutorial will not have permission to complete this section. Run the following commands from the same machine used to create the compute instances.
@@ -300,7 +291,7 @@ gcloud compute ssh controller-0 \
 
 ```
 NAME       STATUS    ROLES     AGE       VERSION
-worker-0   Ready     <none>    20s       v1.10.5
+worker-0   Ready     <none>    22s       v1.11.2
 ```
 
 Next: [Bootstrapping the Windows Worker Nodes](09b-bootstrapping-windows-workers.md)

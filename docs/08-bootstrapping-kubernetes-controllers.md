@@ -65,16 +65,6 @@ INTERNAL_IP=$(curl -s -H "Metadata-Flavor: Google" \
 
 Create the `kube-apiserver.service` systemd unit file:
 
-TODO: verify that all of these apiserver flags are compatible with Windows
-worker nodes.
-  --experimental-encryption-provider-config?
-  --kubelet-certificate-authority?
-  --kubelet-client-certificate?
-  --kubelet-client-key?
-
-TODO: I've changed authorization-mode to AlwaysAllow here. Do Windows nodes work
-if I change it back to Node,RBAC?
-
 ```
 cat <<EOF | sudo tee /etc/systemd/system/kube-apiserver.service
 [Unit]
@@ -90,7 +80,7 @@ ExecStart=/usr/local/bin/kube-apiserver \\
   --audit-log-maxbackup=3 \\
   --audit-log-maxsize=100 \\
   --audit-log-path=/var/log/audit.log \\
-  --authorization-mode=AlwaysAllow \\
+  --authorization-mode=Node,RBAC \\
   --bind-address=0.0.0.0 \\
   --client-ca-file=/var/lib/kubernetes/ca.pem \\
   --enable-admission-plugins=Initializers,NamespaceLifecycle,NodeRestriction,LimitRanger,ServiceAccount,DefaultStorageClass,ResourceQuota \\
@@ -318,27 +308,6 @@ No resources found.
 
 Test the nginx HTTP health check proxy:
 
-NOTE: after I tried changing --authorization-mode=Node,RBAC to
---authorization-mode=AlwaysAllow in /etc/systemd/system/kube-apiserver.service,
-I started getting 401 Unauthorized returned for these requests (with K8s
-1.10.5). After setting up my new Linux wworker-0 it was also unable to join the
-cluster. So I went and set the authorization-mode back, but will Windows nodes
-now be able to join?
-  Why did AlwaysAllow work before, but not now??
-Turns out that Windows nodes are NOT able to join with Node,RBAC authorization.
-However, if I simply stopped the components on the controllers and the Linux
-worker, switched back to AlwaysAllow, then restarted the controller and Linux
-worker components the Linux worker WAS able to join. Apparently having joined
-once with Node,RBAC means that AlwaysAllow will now also work for the Linux
-worker?
-  Then, while AlwaysAllow was still set, I was able to join my Windows worker
-  nodes too. Woohoo!
-
-Trying
-https://github.com/kubernetes/kubernetes/issues/45787#issuecomment-301517010
-made no difference.
-
-
 ```
 curl -H "Host: kubernetes.default.svc.cluster.local" -i http://127.0.0.1/healthz
 ```
@@ -361,8 +330,8 @@ ok
 In this section you will configure RBAC permissions to allow the Kubernetes API Server to access the Kubelet API on each worker node. Access to the Kubelet API is required for retrieving metrics, logs, and executing commands in pods. See [Using RBAC Authorization](https://kubernetes.io/docs/reference/access-authn-authz/rbac/) for more information.
 
 TODO: skipped this section for now and got Linux and Windows nodes to work
-without it. Come back and see if Windows node will work with it; I'm not sure if
-Windows kubelet supports RBAC at this time.
+without it. Come back and see if Windows node will work with it: does Windows
+kubelet support incoming RBAC at this time?
 
 > This tutorial sets the Kubelet `--authorization-mode` flag to `Webhook`. Webhook mode uses the [SubjectAccessReview](https://kubernetes.io/docs/admin/authorization/#checking-api-access) API to determine authorization.
 
@@ -478,14 +447,14 @@ curl --cacert ca.pem https://${KUBERNETES_PUBLIC_ADDRESS}:6443/version
 > output
 
 ```
-{
+{ 
   "major": "1",
-  "minor": "10",
-  "gitVersion": "v1.10.5",
-  "gitCommit": "32ac1c9073b132b8ba18aa830f46b77dcceb0723",
+  "minor": "11",
+  "gitVersion": "v1.11.2",
+  "gitCommit": "bb9ffb1654d4a729bb4cec18ff088eacc153c239",
   "gitTreeState": "clean",
-  "buildDate": "2018-06-21T11:34:22Z",
-  "goVersion": "go1.9.3",
+  "buildDate": "2018-08-07T23:08:19Z",
+  "goVersion": "go1.10.3",
   "compiler": "gc",
   "platform": "linux/amd64"
 }

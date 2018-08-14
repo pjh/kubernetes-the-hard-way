@@ -118,6 +118,17 @@ done
 
 Each worker instance requires a pod subnet allocation from the Kubernetes cluster CIDR range. The pod subnet allocation will be used to configure container networking in a later exercise. The `pod-cidr` instance metadata will be used to expose pod subnet allocations to compute instances at runtime.
 
+This guide uses the most recent [Windows Server Semi-Annual
+Channel](https://docs.microsoft.com/en-us/windows-server/get-started/semi-annual-channel-overview)
+release for the Windows nodes (version 1803 as of this writing) because these
+releases have the best support for containers and Kubernetes. When running
+certain commands on the Windows nodes we need to know which OS version we're
+running on, since Windows container images for one OS version [are incompatible
+with other OS
+versions](https://blogs.technet.microsoft.com/virtualization/2017/10/18/container-images-are-now-out-for-windows-server-version-1709/).
+The `win-version` instance metadata key will be used to track the Windows OS
+version.
+
 > The Kubernetes cluster CIDR range is defined by the Controller Manager's `--cluster-cidr` flag. In this tutorial the cluster CIDR range will be set to `10.200.0.0/16`, which supports 254 subnets.
 
 Create three compute instances which will host the Kubernetes worker nodes:
@@ -139,18 +150,17 @@ for i in 0; do
 done
 ```
 
-TODO: make the 1709, 1803 version tag a constant / metadata tag!
-
 ```
+WIN_VERSION="1803"  # Windows Server, version 1803
 for i in 1 2; do
   gcloud compute instances create worker-${i} \
     --async \
     --boot-disk-size 200GB \
     --can-ip-forward \
-    --image-family windows-1803-core-for-containers \
+    --image-family windows-${WIN_VERSION}-core-for-containers \
     --image-project windows-cloud \
     --machine-type n1-standard-2 \
-    --metadata pod-cidr=10.200.${i}.0/24,serial-port-enable=1 \
+    --metadata pod-cidr=10.200.${i}.0/24,serial-port-enable=1,win-version=${WIN_VERSION} \
     --private-network-ip 10.240.0.2${i} \
     --scopes compute-rw,storage-ro,service-management,service-control,logging-write,monitoring \
     --subnet kubernetes \
@@ -248,7 +258,9 @@ Connection to XX.XXX.XXX.XXX closed
 
 ## Configuring Access to Windows instances
 
-This tutorial only uses PowerShell commands and a GUI is not required. This tutorial targets the latest Windows Server semi-annual release (version 1803 as of this writing) and so a GUI is not supported anyway.
+This tutorial only uses PowerShell commands and a GUI is not required. This
+tutorial targets the Windows Server semi-annual releases and so a GUI is not
+supported anyway.
 
 If you are running a Windows machine locally, connecting to Windows instances
 via [remote PowerShell

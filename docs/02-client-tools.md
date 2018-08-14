@@ -76,7 +76,7 @@ Releases](https://github.com/kubernetes/kubernetes/releases) page to find the
 latest Kubernetes release or use your preferred version:
 
 ```
-gcloud compute project-info add-metadata --metadata=k8s-version=v1.10.5
+gcloud compute project-info add-metadata --metadata=k8s-version=v1.11.2
 ```
 
 ## Install kubectl
@@ -121,7 +121,7 @@ kubectl version --client
 > output
 
 ```
-Client Version: version.Info{Major:"1", Minor:"10", GitVersion:"v1.10.5", GitCommit:"32ac1c9073b132b8ba18aa830f46b77dcceb0723", GitTreeState:"clean", BuildDate:"2018-06-21T11:46:00Z", GoVersion:"go1.9.3", Compiler:"gc", Platform:"linux/amd64"}
+Client Version: version.Info{Major:"1", Minor:"11", GitVersion:"v1.11.2", GitCommit:"bb9ffb1654d4a729bb4cec18ff088eacc153c239", GitTreeState:"clean", BuildDate:"2018-08-07T23:17:28Z", GoVersion:"go1.10.3", Compiler:"gc", Platform:"linux/amd64"}
 ```
 
 Next: [Provisioning Compute Resources](03-compute-resources.md)

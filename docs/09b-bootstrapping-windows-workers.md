@@ -1,15 +1,16 @@
 # Bootstrapping the Windows Worker Nodes
 
 In this lab you will bootstrap two Windows Kubernetes worker nodes.  The
-following components will be installed on each node: [container networking
-plugins](https://github.com/containernetworking/cni),
+following components will be installed on each node: [Windows container
+networking
+plugins](https://github.com/Microsoft/SDN/tree/master/Kubernetes/wincni),
 [kubectl](https://kubernetes.io/docs/reference/kubectl/overview/), and
 [kubelet](https://kubernetes.io/docs/admin/kubelet), and
 [kube-proxy](https://kubernetes.io/docs/concepts/cluster-administration/proxies).
 
 Docker should be preinstalled on your Windows instances if you created them
-using the `windows-1803-core-for-containers` image as instructed. If you're
-using a different Windows image, follow [these
+using the `windows-${WIN_VERSION}-core-for-containers` image as instructed. If
+you're using a different Windows image, follow [these
 steps](https://cloud.google.com/compute/docs/containers/#install_docker) to
 install Docker and configure some GCE-specific workarounds.
 
@@ -19,12 +20,37 @@ The commands in this lab must be run on each Windows worker instance: `worker-1`
 and `worker-2`. RDP to each instance using your RDP client as described
 previously, then run the commands below in a PowerShell session.
 
-Disable the Windows firewall (NOTE: this is currently recommended while
-Kubernetes Windows support is beta, but should not be done for production
-clusters):
+### Disable the Windows firewall
+
+NOTE: this is currently recommended while Kubernetes Windows support is beta,
+but should not be done for production clusters.
 
 ```
 Set-NetFirewallProfile -Profile Domain, Public, Private -Enabled False
+```
+
+### Set environment variables
+
+Setting these environment variables globally will make them available to
+all the PowerShell instances in the steps below. The variables will not be
+available until after the system is restarted in a subsequent step.
+
+```
+$k8sDir = "C:\k8s_hardway"
+[Environment]::SetEnvironmentVariable(
+    "K8S_DIR", "${k8sDir}", "Machine")
+[Environment]::SetEnvironmentVariable(
+    "NODE_DIR", "${k8sDir}\node", "Machine")
+[Environment]::SetEnvironmentVariable(
+    "Path", $env:Path + ";${k8sDir}\node", "Machine")
+[Environment]::SetEnvironmentVariable(
+    "CNI_DIR", "${k8sDir}\cni", "Machine")
+[Environment]::SetEnvironmentVariable(
+    "KUBELET_CONFIG", "${k8sDir}\kubelet-config.yaml", "Machine")
+[Environment]::SetEnvironmentVariable(
+    "KUBECONFIG", "${k8sDir}\$(hostname).kubeconfig", "Machine")
+[Environment]::SetEnvironmentVariable(
+    "KUBE_NETWORK", "l2bridge", "Machine")
 ```
 
 ### Install additional software
@@ -40,15 +66,16 @@ Once Chocolatey is installed, use it to install Git, 7Zip and Notepad++:
 choco install -y git 7zip notepadplusplus
 ```
 
-After installing this software, a reboot is recommended to ensure that the
-executables will be on your PATH for all your PowerShell instances:
-
-TODO: set up permanent environment variables at this step, so they'll be
-available to all subsequent PowerShell instances?
+After installing this software, reboot to ensure that the environment variables
+set previously as well as the PATH for the newly installed software will be
+available for all PowerShell instances:
 
 ```
 Restart-Computer -Force
 ```
+
+Reconnect to the instances after the reboot and continue with the following
+steps.
 
 ### Create the "pause image"
 
@@ -58,22 +85,18 @@ are copied from Microsoft's Virtualization-Documentation, with some
 modifications.
 
 The "pause image" simply runs the ping command indefinitely. Create a Dockerfile
-for it:
+and build the container image:
 
 ```
-$k8sDir = "C:\k8s_hardway"
-$pauseImage = "${k8sDir}\pauseimage"
-mkdir ${PAUSE_IMAGE}
-New-Item -ItemType file ${pauseImage}\Dockerfile
-Set-Content ${pauseImage}\Dockerfile "FROM microsoft/nanoserver:1803`n`nCMD cmd /c ping -t localhost"
-```
+$winVersion = "$([System.Text.Encoding]::ASCII.GetString((`
+  Invoke-WebRequest -UseBasicParsing -H @{'Metadata-Flavor' = 'Google'} `
+  http://metadata.google.internal/computeMetadata/v1/instance/attributes/win-version).Content))"
 
-TODO: make the 1709, 1803 version tag a constant / metadata tag.
-
-Then build the container image:
-
-```
-docker build -t kubeletwin/pause ${pauseImage}
+mkdir ${env:K8S_DIR}\pauseimage
+New-Item -ItemType file ${env:K8S_DIR}\pauseimage\Dockerfile
+Set-Content ${env:K8S_DIR}\pauseimage\Dockerfile `
+  "FROM microsoft/nanoserver:${winVersion}`n`nCMD cmd /c ping -t localhost"
+docker build -t kubeletwin/pause ${env:K8S_DIR}\pauseimage
 ```
 
 After the container builds, run the following command to confirm that it works:
@@ -98,53 +121,30 @@ version we specified earlier as a project-level metadata value.
 ```
 $k8sVersion = "$(gcloud compute project-info describe `
   --format='value(commonInstanceMetadata.items.k8s-version)')"
-$nodeDir = "${k8sDir}\node"
 
-mkdir ${nodeDir}
+mkdir ${env:NODE_DIR}
 
 # Disable progress bar to dramatically increase download speed.
 $ProgressPreference = 'SilentlyContinue'
 Invoke-WebRequest `
   https://storage.googleapis.com/kubernetes-release/release/${k8sVersion}/bin/windows/amd64/kubectl.exe `
-  -OutFile ${nodeDir}\kubectl.exe
+  -OutFile ${env:NODE_DIR}\kubectl.exe
 Invoke-WebRequest `
   https://storage.googleapis.com/kubernetes-release/release/${k8sVersion}/bin/windows/amd64/kubelet.exe `
-  -OutFile ${nodeDir}\kubelet.exe
+  -OutFile ${env:NODE_DIR}\kubelet.exe
 Invoke-WebRequest `
   https://storage.googleapis.com/kubernetes-release/release/${k8sVersion}/bin/windows/amd64/kube-proxy.exe `
-  -OutFile ${nodeDir}\kube-proxy.exe
+  -OutFile ${env:NODE_DIR}\kube-proxy.exe
 ```
 
-TODO: try containerd and see if it works.
+### Verify the kubeconfig
 
-Add the node binary directory to your path. Note that the updated path will not
-take effect in new terminals until after a reboot.
-
-```
-$env:Path += ";${nodeDir}"
-[Environment]::SetEnvironmentVariable("Path", $env:Path + ";${nodeDir}", `
-  [EnvironmentVariableTarget]::Machine)
-```
-
-### Create the Kubernetes config
-
-Update the KUBECONFIG environment variable to point to the kubeconfig that we
-created previously.
-
-TODO: who/what uses this? Can I skip it? There are different kubeconfigs for
-kubelet and kube-proxy, if I need to use one here which one should it be?
-
-```
-$env:KUBECONFIG="${k8sDir}\$(hostname).kubeconfig"
-[Environment]::SetEnvironmentVariable("KUBECONFIG", `
-  "${k8sDir}\$(hostname).kubeconfig", [EnvironmentVariableTarget]::User)
-```
-
-(This config can also be specified using the `--kubeconfig` flag for `kubectl`).
-
-### Verification
-
-Run these commands to verify that kubectl is properly using the kubeconfig:
+The
+[kubeconfig](https://kubernetes.io/docs/tasks/access-application-cluster/configure-access-multiple-clusters/#define-clusters-users-and-contexts)
+tells `kubectl` which Kubernetes cluster to connect to and how. We set the
+`${env:KUBECONFIG}` variable above to the kubeconfig that we created in an
+earlier lab. Run these commands to verify that `kubectl` is properly using the
+kubeconfig:
 
 ```
 kubectl config view
@@ -159,13 +159,13 @@ kubectl config view
 > contexts:
 > - context:
 >     cluster: kubernetes-the-hard-way
->     user: system:node:wworker-2
+>     user: system:node:worker-2
 >   name: default
 > current-context: default
 > kind: Config
 > preferences: {}
 > users:
-> - name: system:node:wworker-2
+> - name: system:node:worker-2
 >   user:
 >     client-certificate-data: REDACTED
 >     client-key-data: REDACTED
@@ -174,54 +174,44 @@ kubectl config view
 kubectl version
 ```
 
-> Client Version: version.Info{Major:"1", Minor:"10", GitVersion:"v1.10.5", GitCommit:"32ac1c9073b132b8ba18aa830f46b77dcceb0723", GitTreeState:"clean", BuildDate:"2018-06-21T11:46:00Z", GoVersion:"go1.9.3", Compiler:"gc", Platform:"windows/amd64"}
-> Server Version: version.Info{Major:"1", Minor:"10", GitVersion:"v1.10.5", GitCommit:"32ac1c9073b132b8ba18aa830f46b77dcceb0723", GitTreeState:"clean", BuildDate:"2018-06-21T11:34:22Z", GoVersion:"go1.9.3", Compiler:"gc", Platform:"linux/amd64"}
+> Client Version: version.Info{Major:"1", Minor:"11", GitVersion:"v1.11.2", GitCommit:"bb9ffb1654d4a729bb4cec18ff088eacc153c239", GitTreeState:"clean", BuildDate:"2018-08-07T23:17:28Z", GoVersion:"go1.10.3", Compiler:"gc", Platform:"windows/amd64"}
+> Server Version: version.Info{Major:"1", Minor:"11", GitVersion:"v1.11.2", GitCommit:"bb9ffb1654d4a729bb4cec18ff088eacc153c239", GitTreeState:"clean", BuildDate:"2018-08-07T23:08:19Z", GoVersion:"go1.10.3", Compiler:"gc", Platform:"linux/amd64"}
 
 If you see `Unable to connect to the server: dial tcp [::1]:8080: connectex: No
 connection could be made because the target machine actively refused it.` then
 the kubeconfig is not being read properly or was not set up properly in the
 previous labs.
 
+If you prefer, the kubeconfig can be specified explicitly by using the
+`--kubeconfig` flag for `kubectl` instead of `${env:KUBECONFIG}`. When running
+the `kubelet` and `kube-proxy` below we'll set the `--kubeconfig` explicitly.
+The `kubelet` uses the same kubeconfig as `kubectl`, while the `kube-proxy` uses
+a slightly different kubeconfig.
+
 ### Configure CNI Networking
 
-TODO: at this point the Microsoft guide has these
-[contents](https://github.com/Microsoft/SDN/tree/master/Kubernetes/windows)
-under ${k8sDir}:
+We'll use the Microsoft-provided `wincni` CNI plugin for networking on our
+Windows worker nodes. Run these commands to fetch the CNI binary and put it into
+place:
 
- * A bunch of .ps1 scripts that I probably don't need.
- * cni/wincni.exe
- * cni/config/l2bridge.conf
- * debug/ - has scripts for capturing debug traces.
-
-How is wincni.exe used? What does l2bridge.conf do?
-
-First attempt: put cni/wincni.exe into place, then manually paste in
-l2bridge.conf, using values that start-kubelet.ps1 would put there! This is
-pretty similar to how the Linux worker node is set up.
-
-The wincni repository is [here](https://github.com/Microsoft/SDN/tree/master/Kubernetes/wincni), but it's unclear if/how that code can be built (just a `go build` command?). For now, we'll use the prebuilt wincni.exe binary:
+TODO: describe `wincni` in more detail. What does it do, how is it different
+from other possible CNI plugins?
 
 ```
-$cniDir = "${k8sDir}\cni"
-mkdir ${cniDir}
-
-# Need to specify TLS version 1.2 since GitHub API requires it; without changing
-# the SecurityProtocol, Invoke-WebRequest will fail with "The request was
-# aborted: Could not create SSL/TLS secure channel."
-#
-# "-bor" in this command is for bitwise-OR:
-[Net.ServicePointManager]::SecurityProtocol = `
-  [Net.ServicePointManager]::SecurityProtocol `
-  -bor [Net.SecurityProtocolType]::Tls12
-
-Invoke-WebRequest `
-  https://github.com/Microsoft/SDN/raw/master/Kubernetes/windows/cni/wincni.exe `
-  -OutFile ${cniDir}\wincni.exe
+mkdir ${env:CNI_DIR}
+git clone https://github.com/Microsoft/SDN.git ${env:K8S_DIR}\SDN
+Copy-Item ${env:K8S_DIR}\SDN\Kubernetes\windows\cni\wincni.exe ${env:CNI_DIR}
 ```
 
-Now create the configuration file for "l2bridge" mode for the CNI plugin. (NOTE:
-if you need to edit the configuration or correct a mistake you can open the file
-using `notepad++.exe`.)
+TODO: build `wincni` from source instead of using the prebuilt binary? The
+code is under `Kubernetes\wincni` in the repository, but it's unclear if/how
+this code can be built (just a `go build` command?).
+
+Now create the configuration file for "l2bridge" mode for the CNI plugin. This
+config file is not well-documented, the contents are a modified version of what
+the
+[`start-kubelet.ps1`](https://github.com/Microsoft/SDN/blob/master/Kubernetes/windows/start-kubelet.ps1)
+script generates.
 
 ```
 $podCidr = "$([System.Text.Encoding]::ASCII.GetString((`
@@ -233,8 +223,8 @@ $podCidr = "$([System.Text.Encoding]::ASCII.GetString((`
 $podGateway = ${podCidr}.substring(0, ${podCidr}.lastIndexOf('.')) + '.1'
 $podEndpointGateway = ${podCidr}.substring(0, ${podCidr}.lastIndexOf('.')) + '.2'
 
-mkdir ${cniDir}\config
-$l2bridgeConf = "${cniDir}\config\l2bridge.conf"
+mkdir ${env:CNI_DIR}\config
+$l2bridgeConf = "${env:CNI_DIR}\config\l2bridge.conf"
 New-Item -ItemType file ${l2bridgeConf}
 
 Set-Content ${l2bridgeConf} `
@@ -295,7 +285,10 @@ Set-Content ${l2bridgeConf} `
 }'.replace('POD_CIDR', ${podCidr}).replace('POD_ENDPOINT_GW', ${podEndpointGateway})
 ```
 
-TODO: the 10.240.0.23 address needs adjusting, I think: should be e.g.
+NOTE: if you need to edit the configuration or correct a mistake you can open
+the file using `notepad++.exe`.
+
+TODO BUG: the 10.240.0.23 address needs adjusting, I think: should be e.g.
 10.240.0.21, 10.240.0.22 for worker-1, worker-2. Right?
 
 NOTE: see troubleshooting/09a-sidebar.md for debugging I did at this point.
@@ -347,30 +340,24 @@ Explanation of the fields in the CNI config:
 TODO: understand what the "management" network is/does and how to configure it
 appropriately. See article.
 
-Then, we need to invoke some commands to set up the Windows node networking.
-First, get the Microsoft helper scripts:
-
-```
-git clone https://github.com/Microsoft/SDN.git ${k8sDir}\SDN
-$sdnScripts = "${k8sDir}\SDN\Kubernetes\windows"
-```
-
 TODO: instead of using these unsupported scripts that Microsoft ad-hoc released,
 write your own scripts / executables that build on hcsshim instead. Just check
 these scripts into this repository.
 
-Then run the following commands to configure the Host Networking Service (HNS).
-Note that your RDP session may be interrupted when you invoke these commands.
+### Configure the Host Networking Service
+
+Continue with the Windows node network setup by running these commands to
+configure the Host Networking Service (HNS). Note that your RDP session may be
+interrupted when you invoke these commands.
 
 ```
-$hnsNetworkName = "l2bridge"
 $endpointName = "cbr0"
 $vnicName = "vEthernet ($endpointName)"
 
-Import-Module ${sdnScripts}\hns.psm1
+Import-Module ${env:K8S_DIR}\SDN\Kubernetes\windows\hns.psm1
 
 New-HNSNetwork -Type "L2Bridge" -AddressPrefix $podCidr -Gateway $podGateway `
-  -Name $hnsNetworkName -Verbose
+  -Name ${env:KUBE_NETWORK} -Verbose
 $hnsNetwork = Get-HnsNetwork | ? Type -EQ "L2Bridge"
 $hnsEndpoint = New-HnsEndpoint -NetworkId $hnsNetwork.Id -Name $endpointName `
   -IPAddress $podEndpointGateway -Gateway "0.0.0.0" -Verbose
@@ -379,29 +366,18 @@ netsh interface ipv4 set interface "$vnicName" forwarding=enabled
 Get-HNSPolicyList | Remove-HnsPolicyList
 ```
 
-TODO: for Linux at this point we configure containerd and gVisor. Do I need to
-do anything special for configuring Docker for Windows nodes?
-TODO: also not configuring here: loopback network?
-
 ### Configure the Kubelet
 
-TODO: C:\k8s_hardway still has these files:
-  ca.pem
-  kube-proxy.kubeconfig
-  worker-2-key.pem
-  worker-2.kubeconfig
-  worker-2.pem
-Just leave them where they are for now, but consider moving to a better place?
+Create the kubelet config file (which is different from the kubeconfig file...):
 
-Create the `kubelet-config.yaml` configuration file (Note: for authentication
-set anonymous to true instead of false since I skipped RBAC setup (webhook). For
-authorization set mode to AlwaysAllow instead of Webhook
-(https://github.com/kubernetes/kubernetes/blob/cd78e999f9aade259c177c1698129311c83aa7d3/pkg/kubeapiserver/authorizer/modes/modes.go#L30)).
+TODO: for authentication I've set anonymous to true instead of false since I
+skipped RBAC setup (webhook) in an earlier lab. For authorization I've set mode
+to AlwaysAllow instead of Webhook
+(https://github.com/kubernetes/kubernetes/blob/cd78e999f9aade259c177c1698129311c83aa7d3/pkg/kubeapiserver/authorizer/modes/modes.go#L30).
+Return to earlier lab and see if RBAC works there and here.
 
 ```
-$kubeletConfig = "${k8sDir}\kubelet-config.yaml"
-
-Set-Content ${kubeletConfig} `
+Set-Content ${env:KUBELET_CONFIG} `
 'kind: KubeletConfiguration
 apiVersion: kubelet.config.k8s.io/v1beta1
 authentication:
@@ -419,110 +395,60 @@ clusterDNS:
 podCIDR: "POD_CIDR"
 runtimeRequestTimeout: "15m"
 tlsCertFile: "K8S_DIR\HOSTNAME.pem"
-tlsPrivateKeyFile: "K8S_DIR\HOSTNAME-key.pem"'.replace('K8S_DIR', ${k8sDir}).replace('POD_CIDR', ${podCidr}).replace('HOSTNAME', $(hostname))
+tlsPrivateKeyFile: "K8S_DIR\HOSTNAME-key.pem"'.replace('K8S_DIR', `
+${env:K8S_DIR}).replace('POD_CIDR', ${podCidr}).replace('HOSTNAME', `
+$(hostname)).replace('\', '\\')
 ```
 
 ### Configure the Kubernetes Proxy
 
-TODO: skipped these steps for now. Create a kube-proxy-config on the Windows
-node and move the kubeproxy command-line flags from below to here.
-
-```
-sudo mv kube-proxy.kubeconfig /var/lib/kube-proxy/kubeconfig
-```
-
-Create the `kube-proxy-config.yaml` configuration file:
-
-```
-cat <<EOF | sudo tee /var/lib/kube-proxy/kube-proxy-config.yaml
-kind: KubeProxyConfiguration
-apiVersion: kubeproxy.config.k8s.io/v1alpha1
-clientConnection:
-  kubeconfig: "/var/lib/kube-proxy/kubeconfig"
-mode: "iptables"
-clusterCIDR: "10.200.0.0/16"
-EOF
-```
+TODO: create a kube-proxy-config on the Windows node and move the kubeproxy
+command-line flags from below to here. See corresponding section for Linux
+worker nodes.
 
 ### Start the Worker Services
 
-Finally, open a separate powershell window and start the kubelet:
-
-TODO: make $k8sDir / $nodeDir part of the environment that sticks across
-powershells!
-  Also: $env:KUBECONFIG ?
+Finally, open a separate PowerShell window and start the `kubelet`:
 
 ```
-$k8sDir = "C:\k8s_hardway"
-$nodeDir = "${k8sDir}\node"
-$cniDir = "${k8sDir}\cni"
-$kubeletConfig = "${k8sDir}\kubelet-config.yaml"
-$kubeDnsServiceIp = "10.32.0.10"
-
-& ${nodeDir}\kubelet.exe --hostname-override=$(hostname) --v=6 `
+& ${env:NODE_DIR}\kubelet.exe --hostname-override=$(hostname) --v=6 `
   --pod-infra-container-image=kubeletwin/pause --resolv-conf="" `
-  --allow-privileged=true --config=${kubeletConfig} `
+  --allow-privileged=true --config=${env:KUBELET_CONFIG} `
   --enable-debugging-handlers `
-  --kubeconfig=${k8sDir}\$(hostname).kubeconfig --hairpin-mode=promiscuous-bridge `
+  --kubeconfig=${env:K8S_DIR}\$(hostname).kubeconfig --hairpin-mode=promiscuous-bridge `
   --image-pull-progress-deadline=20m --cgroups-per-qos=false `
-  --enforce-node-allocatable="" --network-plugin=cni --cni-bin-dir="${cniDir}" `
-  --cni-conf-dir "${cniDir}\config" --register-node=true
+  --enforce-node-allocatable="" --network-plugin=cni --cni-bin-dir="${env:CNI_DIR}" `
+  --cni-conf-dir="${env:CNI_DIR}\config" --register-node=true
 ```
-
-Note: removed these command-line flags since they are now part of
-kubelet-config.yaml:
-*   --cluster-dns=${kubeDnsServiceIp}
-*   --cluster-domain=cluster.local
-
-Note: the Linux worker's kubelet is also invoked with these flags, all of which
-are either already present above or which should be omitted for the Windows
-kubelet:
-*   --container-runtime=remote \\
-*   --container-runtime-endpoint=unix:///var/run/containerd/containerd.sock \\
-*   --image-pull-progress-deadline=2m \\
-*   --kubeconfig=/var/lib/kubelet/kubeconfig \\
-*   --network-plugin=cni \\
-*   --register-node=true \\
-*   --v=2
-
-TODO: move the rest of the kubelet command-line flags into kubelet-config.yaml.
-See https://kubernetes.io/docs/tasks/administer-cluster/kubelet-config-file/ for
-the flags that are supported.
 
 Note: to use Hyper-V isolation for the pods add
 `--feature-gates=HyperVContainer=true`.
 
-Wait a few seconds, then open a new powershell window and then start kube-proxy:
+TODO: move the rest of the kubelet command-line flags into `${env:KUBELET_CONFIG}`.
+See https://kubernetes.io/docs/tasks/administer-cluster/kubelet-config-file/ for
+the flags that are supported.
+
+Wait a few seconds, then open a new PowerShell window and then start kube-proxy:
 
 ```
-$k8sDir = "C:\k8s_hardway"
-$nodeDir = "${k8sDir}\node"
-$hnsNetworkName = "l2bridge"
-$env:KUBE_NETWORK = $hnsNetworkName
-
-& ${nodeDir}\kube-proxy.exe --v=4 --proxy-mode=kernelspace `
-  --hostname-override=$(hostname) --kubeconfig=${k8sDir}\kube-proxy.kubeconfig `
+& ${env:NODE_DIR}\kube-proxy.exe --v=4 --proxy-mode=kernelspace `
+  --hostname-override=$(hostname) --kubeconfig=${env:K8S_DIR}\kube-proxy.kubeconfig `
   --cluster-cidr="10.200.0.0/16"
 ```
-
-TODO: added --cluster-cidr flag to match Linux kube-proxy-config.yaml. Does the
-Windows kube-proxy still work? Seems to.
 
 After a short delay the worker nodes should successfully join the cluster:
 
 ```
-$k8sDir = "C:\k8s_hardway"
-$nodeDir = "${k8sDir}\node"
-& $k8sDir\node\kubectl get nodes --kubeconfig "${k8sDir}\kube-proxy.kubeconfig"
+& ${env:K8S_DIR}\node\kubectl get nodes
 ```
 
 > Output:
 
 ```
 NAME            STATUS    ROLES     AGE       VERSION
-worker-0        Ready     <none>    1h        v1.10.5
-worker-1        Ready     <none>    1m        v1.10.5
-worker-2        Ready     <none>    1m        v1.10.5
+worker-0        Ready     <none>    1h        v1.11.2
+worker-1        Ready     <none>    1m        v1.11.2
+worker-2        Ready     <none>    1m        v1.11.2
 ```
 
 NOTE: see troubleshooting/windows-worker-cluster-join-RBAC.md for notes about
@@ -531,7 +457,9 @@ started with Node,RBAC authorization.
 
 ## Verification
 
-> The compute instances created in this tutorial will not have permission to complete this section. Run the following commands from the same machine used to create the compute instances.
+> The compute instances created in this tutorial will not have permission to
+> complete this section. Run the following commands from the same machine used
+> to create the compute instances.
 
 List the registered Kubernetes nodes:
 
@@ -544,9 +472,9 @@ gcloud compute ssh controller-0 \
 
 ```
 NAME            STATUS    ROLES     AGE       VERSION
-worker-0        Ready     <none>    1h        v1.10.5
-worker-1        Ready     <none>    1m        v1.10.5
-worker-2        Ready     <none>    1m        v1.10.5
+worker-0        Ready     <none>    1h        v1.11.2
+worker-1        Ready     <none>    1m        v1.11.2
+worker-2        Ready     <none>    1m        v1.11.2
 ```
 
 Next: [Configuring kubectl for Remote Access](10-configuring-kubectl.md)
