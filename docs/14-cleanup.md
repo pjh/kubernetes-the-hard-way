@@ -53,3 +53,5 @@ Delete the `kubernetes-the-hard-way` network VPC:
   gcloud -q compute networks delete kubernetes-the-hard-way
 }
 ```
+
+TODO: clean up project-level metadata.

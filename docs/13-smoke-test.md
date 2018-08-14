@@ -52,9 +52,14 @@ The etcd key should be prefixed with `k8s:enc:aescbc:v1:key1`, which indicates t
 
 In this section you will verify the ability to create and manage [Deployments](https://kubernetes.io/docs/concepts/workloads/controllers/deployment/).
 
-Paste the following text into a file called windows-iis-deployment.yaml:
+Run the following command to generate the config for a Windows
+[IIS](https://hub.docker.com/r/microsoft/iis/) deployment:
 
 ```
+{
+WIN_VERSION=$(gcloud compute instances describe worker-1 \
+  --format='value(metadata.items.win-version)')
+cat <<EOF | tee windows-iis-deployment.yaml
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -73,20 +78,28 @@ spec:
     spec:
       containers:
       - name: iis-servercore
-        image: microsoft/iis:windowsservercore-1803
+        image: microsoft/iis:windowsservercore-${WIN_VERSION}
       nodeSelector:
         beta.kubernetes.io/os: windows
+EOF
+}
 ```
 
-Then run:
+Note the `nodeSelector` field which tells the Kubernetes cluster to schedule
+the IIS pods on Windows nodes.
+
+To see the deployment status run:
 
 ```
-kubectl create -f windows-iis-deployment.yaml
-watch -n 5 "kubectl get deployment iis-deployment && kubectl get pods"
+{
+  kubectl create -f windows-iis-deployment.yaml
+  watch -n 5 "kubectl get deployment iis-deployment && kubectl get pods -l \
+    app=iis"
+}
 ```
 
-After a few minutes you should see 2 available pods for the iis-deployment
-and the two iis pods should enter status Running.
+After a few minutes you should see 2 available pods for the `iis-deployment`
+and the two IIS pods should enter status Running.
 
 TODO: expand on this demo. See
 https://github.com/apprenda/kubernetes-ovn-heterogeneous-cluster/tree/master/demo
@@ -96,15 +109,13 @@ for a heterogeneous cluster demo.
 
 In this section you will verify the ability to access applications remotely using [port forwarding](https://kubernetes.io/docs/tasks/access-application-cluster/port-forward-access-application-cluster/).
 
-Retrieve the full name of the `nginx` pod:
-
-TODO: update this to work for an iis pod. "run=iis" doesn't work, wtf?
+Retrieve the full name of one of the IIS pods:
 
 ```
-POD_NAME=$(kubectl get pods -l run=nginx -o jsonpath="{.items[0].metadata.name}")
+POD_NAME=$(kubectl get pods -l app=iis -o jsonpath="{.items[0].metadata.name}")
 ```
 
-Forward port `8080` on your local machine to port `80` of the `nginx` pod:
+Forward port `8080` on your local machine to port `80` of the IIS pod:
 
 ```
 kubectl port-forward $POD_NAME 8080:80
@@ -123,7 +134,19 @@ In a new terminal make an HTTP request using the forwarding address:
 curl --head http://127.0.0.1:8080
 ```
 
-> output
+> Output (TODO: this is failing in Windows IIS pods right now, `kubectl
+> port-forward` doesn't know how to handle Windows.):
+
+```
+curl: (52) Empty reply from server
+```
+
+```
+Handling connection for 8080
+E0813 19:20:31.466808  248956 portforward.go:331] an error occurred forwarding 8080 -> 80: error forwarding port 80 to pod 1490c7dffb29850e0bb2483cb5567d2c1f45b62ee5e7126c5c339999d544472d, uid : unable to do port forwarding: socat not found.
+```
+
+> Expected output:
 
 ```
 HTTP/1.1 200 OK
@@ -150,17 +173,14 @@ Handling connection for 8080
 
 In this section you will verify the ability to [retrieve container logs](https://kubernetes.io/docs/concepts/cluster-administration/logging/).
 
-Print the `nginx` pod logs:
+Print the IIS pod logs:
 
 ```
 kubectl logs $POD_NAME
 ```
 
-> output
-
-```
-127.0.0.1 - - [14/May/2018:13:59:21 +0000] "HEAD / HTTP/1.1" 200 0 "-" "curl/7.52.1" "-"
-```
+TODO: output is empty, kubectl logs doesn't work with Windows pods or at least
+not with IIS.
 
 ### Exec
 
@@ -169,18 +189,21 @@ In this section you will verify the ability to [execute commands in a container]
 Print the nginx version by executing the `nginx -v` command in the `nginx` container:
 
 ```
-kubectl exec -ti $POD_NAME -- nginx -v
+kubectl exec -ti $POD_NAME -- dir C:\\
 ```
 
-> output
+> Output (TODO: not working on Windows pods):
 
 ```
-nginx version: nginx/1.13.12
+container 048ee6abe0e76f58cadcd79bb21c555152d4635286cd9e21919e393458cfe930 encountered an error during CreateProcess: failure in a Windows system call: The system cannot find the file specified. (0x2) extra info: {"ApplicationName":"","CommandLine":"dir C:\\","User":"","WorkingDirectory":"C:\\","Environment":{"KUBERNETES_PORT":"tcp://10.32.0.1:443","KUBERNETES_PORT_443_TCP":"tcp://10.32.0.1:443","KUBERNETES_PORT_443_TCP_ADDR":"10.32.0.1","KUBERNETES_PORT_443_TCP_PORT":"443","KUBERNETES_PORT_443_TCP_PROTO":"tcp","KUBERNETES_SERVICE_HOST":"10.32.0.1","KUBERNETES_SERVICE_PORT":"443","KUBERNETES_SERVICE_PORT_HTTPS":"443"},"EmulateConsole":true,"CreateStdInPipe":true,"CreateStdOutPipe":true,"CreateStdErrPipe":false,"ConsoleSize":[0,0]}
+command terminated with exit code 126
 ```
 
 ## Services
 
 In this section you will verify the ability to expose applications using a [Service](https://kubernetes.io/docs/concepts/services-networking/service/).
+
+TODO: figure out a service deployment for Windows.
 
 Expose the `nginx` deployment using a [NodePort](https://kubernetes.io/docs/concepts/services-networking/service/#type-nodeport) service:
 
@@ -233,6 +256,8 @@ Accept-Ranges: bytes
 ```
 
 ## Untrusted Workloads
+
+TODO: update this section to use Hyper-V isolation instead of gVisor!
 
 This section will verify the ability to run untrusted workloads using [gVisor](https://github.com/google/gvisor).
 
