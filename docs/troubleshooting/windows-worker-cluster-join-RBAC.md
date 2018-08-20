@@ -1,3 +1,5 @@
+# Windows RBAC troubleshooting
+
 journalctl --since="2018-08-10 19:35:51"
 
 Now that wworker-2 is working with kubelet-config.yaml, try resetting authorization mode to Node,RBAC in controllers; make sure that healthz check works, make sure that Linux wworker-0 can join again, and then see if wworker-2 can join again! (wworker-1 probably will not be able to since it's not using kubelet-config.yaml yet).

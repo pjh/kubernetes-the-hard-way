@@ -214,6 +214,8 @@ the
 script generates.
 
 ```
+$vethIp = (Get-NetAdapter | Where-Object Name -Like "vEthernet (*" |`
+  Get-NetIPAddress -AddressFamily IPv4).IPAddress
 $podCidr = "$([System.Text.Encoding]::ASCII.GetString((`
   Invoke-WebRequest -UseBasicParsing -H @{'Metadata-Flavor' = 'Google'} `
   http://metadata.google.internal/computeMetadata/v1/instance/attributes/pod-cidr).Content))"
@@ -277,72 +279,27 @@ Set-Content ${l2bridgeConf} `
             "Name":  "EndpointPolicy",
             "Value":  {
                 "Type":  "ROUTE",
-                "DestinationPrefix":  "10.240.0.23/32",
+                "DestinationPrefix":  "VETH_IP/32",
                 "NeedEncap":  true
             }
         }
     ]
-}'.replace('POD_CIDR', ${podCidr}).replace('POD_ENDPOINT_GW', ${podEndpointGateway})
+}'.replace('POD_CIDR', ${podCidr})`
+.replace('POD_ENDPOINT_GW', ${podEndpointGateway})`
+.replace('VETH_IP', ${vethIp})
 ```
 
-NOTE: if you need to edit the configuration or correct a mistake you can open
-the file using `notepad++.exe`.
+See [CNI config explanation](cni-config-explanation.md) for an explanation of
+the fields in the CNI configuration. Note that if you need to edit the
+configuration or correct a mistake you can open the file using `notepad++.exe`.
 
-TODO BUG: the 10.240.0.23 address needs adjusting, I think: should be e.g.
-10.240.0.21, 10.240.0.22 for worker-1, worker-2. Right?
-
-NOTE: see troubleshooting/09a-sidebar.md for debugging I did at this point.
-
-Explanation of the fields in the CNI config:
-
-* name: "l2bridge" is the type of container networking that will be used. Unsure
-  if it's meaningful to wincni.exe. Possible / likely values are: [ICS,
-  Internal, Transparent, NAT, Overlay, L2Bridge, L2Tunnel, Layered, Private].
-  (see hns.psm1: New-HnsNetwork).
-* master: the name of the primary network interface, presumably. In my GCE
-  instance it is also Ethernet.
-* capabilities.portMappings: unsure.
-* ipam.environment: obviously we're not using azure, not sure it matters.
-* ipam.subnet: the $podCidr - 192.168.1.0/24 in Microsoft steps, 10.200.N.0/24
-  for worker-N in these steps.
-    - Get using curl from metadata server!
-* ipam.routes.GW: the .2 address in the $podCidr (Windows nodes use .2 for the
-  gateway due to a platform limitation). So, for worker-N in these steps, should
-  be 10.200.N.2.
-    - ipam probably happens on a per-pod basis, and containers in the pod
-      communicate with the .2 address for the gateway (whereas the host side
-      of the gateway is the .1), I think.
-* dns.Nameservers: contains $kubeDnsServiceIp. For Microsoft steps this is currently
-  hardcoded to 11.0.0.10.
-    - In these steps it seems to be "10.32.0.10" (see kubelet-config.yaml for Linux
-      node). 10.32.0.0/24 is the service-cluster-ip-range (see lab 8), .10 seems
-      to be the canonical DNS IP within that subnet.
-* dns.Search: contains $KubeDnsSuffix; "svc.cluster.local" in Microsoft steps.
-    - For GCE, could be just "cluster.local" (see Linux kubelet-config.yaml), or
-      maybe "svc.cluster.local" is still right. Tried the former for now.
-* AdditionalArgs EndpointPolicy OutBoundNAT: ExceptionList contains
-  $clusterCIDR, $serviceCIDR, and Get-MgmtSubnet.
-    - $clusterCIDR: "192.168.0.0/16" for Microsoft steps. "10.200.0.0/16" for
-      GCE, according to Linux kube-proxy-config.yaml.
-    - $serviceCIDR: "11.0.0.0/8" for Microsoft steps. "10.32.0.0/24" for GCE I
-      think.
-    - Get-MgmtSubnet: "10.124.24.0/23" for Microsoft steps: still uncertain
-      what this is, but after running start-kubelet.ps1 on worker-3 node I
-      got "10.240.0.0/24" for these GCE steps.
-* AdditionalArgs EndpointPolicy ROUTEs: DestinationPrefix one contains
-  $serviceCIDR, DestinationPrefix two contains Get-MgmtIpAddress/32.
-    - $serviceCIDR: "11.0.0.0/8" for Microsoft steps. "10.32.0.0/24" for GCE I
-      think.
-    - Get-MgmtIpAddress: 10.124.24.196 for Microsoft steps. Still uncertain
-      about what this actually is, but after running start-kubelet.ps1 on
-      worker-3 node I got "10.240.0.23/32" for these GCE steps.
-
-TODO: understand what the "management" network is/does and how to configure it
-appropriately. See article.
+Note: see [CNI config
+troubleshooting](troubleshooting/win-cni-config-troubleshooting.md) for some
+informal notes I took while debugging this configuration.
 
 TODO: instead of using these unsupported scripts that Microsoft ad-hoc released,
-write your own scripts / executables that build on hcsshim instead. Just check
-these scripts into this repository.
+write scripts / executables that build on hcsshim instead and check them into
+this repository.
 
 ### Configure the Host Networking Service
 
@@ -451,9 +408,10 @@ worker-1        Ready     <none>    1m        v1.11.2
 worker-2        Ready     <none>    1m        v1.11.2
 ```
 
-NOTE: see troubleshooting/windows-worker-cluster-join-RBAC.md for notes about
-issues I was having with getting Windows nodes to join when the apiserver was
-started with Node,RBAC authorization.
+Note: see [Windows RBAC
+troubleshooting](troubleshooting/windows-worker-cluster-join-RBAC.md) for notes
+about issues I was having with getting Windows nodes to join when the apiserver
+was started with Node,RBAC authorization.
 
 ## Verification
 
@@ -476,5 +434,17 @@ worker-0        Ready     <none>    1h        v1.11.2
 worker-1        Ready     <none>    1m        v1.11.2
 worker-2        Ready     <none>    1m        v1.11.2
 ```
+
+TODO: in my Windows nodes the connection to the GCE metadata server was
+disrupted by some of the configuration done here (or in an earlier or later
+lab). This can be seen by looking at the serial console, which will show a
+message like the one below. Figure out what steps causes this; check the hosts
+file, check nslookup. A reboot doesn't help.
+
+> 2018/08/20 22:07:05 GCEMetadataScripts: ERROR main.go:258: error connecting to
+> metadata server, retrying in 15s, error: Get
+> http://metadata.google.internal/computeMetadata/v1/instance/attributes/?recursive=true&alt=json&timeout_sec=10&last_etag=NONE:
+> dial tcp: lookup metadata.google.internal: getaddrinfow: The requested name is
+> valid, but no data of the requested type was found.
 
 Next: [Configuring kubectl for Remote Access](10-configuring-kubectl.md)
