@@ -135,7 +135,8 @@ curl --head http://127.0.0.1:8080
 ```
 
 > Output (TODO: this is failing in Windows IIS pods right now, `kubectl
-> port-forward` doesn't know how to handle Windows.):
+> port-forward` doesn't know how to handle Windows. See
+> https://github.com/kubernetes/kubernetes/issues/64531.):
 
 ```
 curl: (52) Empty reply from server

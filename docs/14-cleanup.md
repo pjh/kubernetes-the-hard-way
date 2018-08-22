@@ -54,4 +54,4 @@ Delete the `kubernetes-the-hard-way` network VPC:
 }
 ```
 
-TODO: clean up project-level metadata.
+TODO: clean up project-level metadata, GCS bucket.

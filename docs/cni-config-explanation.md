@@ -1,6 +1,6 @@
 # Explanation of the Windows CNI configuration fields
 
-Explanation of the fields in the CNI config:
+Explanation of the fields in the CNI config (`l2bridge.conf`):
 
 * name: "l2bridge" is the type of container networking that will be used. Unsure
   if it's meaningful to wincni.exe. Possible / likely values are: [ICS,

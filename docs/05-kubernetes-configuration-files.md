@@ -191,18 +191,26 @@ admin.kubeconfig
 
 ## Distribute the Kubernetes Configuration Files
 
-Copy the appropriate `kubelet` and `kube-proxy` kubeconfig files to each worker instance:
+Get the name of the GCS bucket from the project-level metadata:
+
+```
+BUCKET_NAME=`gcloud compute project-info describe \
+  --format='value(commonInstanceMetadata.items.k8s-bucket)'`
+```
+
+Then copy the appropriate `kubelet` and `kube-proxy` kubeconfig files to each
+worker instance:
 
 ```
 {
   for instance in worker-0; do
     gcloud compute scp ${instance}.kubeconfig kube-proxy.kubeconfig ${instance}:~/
   done
-  gsutil cp kube-proxy.kubeconfig gs://k8s-the-hard-way/
+  gsutil cp kube-proxy.kubeconfig gs://${BUCKET_NAME}/
   for instance in worker-1 worker-2; do
-    gsutil cp ${instance}.kubeconfig gs://k8s-the-hard-way/
+    gsutil cp ${instance}.kubeconfig gs://${BUCKET_NAME}/
   done
-  gsutil ls gs://k8s-the-hard-way/
+  gsutil ls gs://${BUCKET_NAME}/
 }
 ```
 
@@ -211,8 +219,8 @@ commands in PowerShell:
 
 ```
 $k8sDir = "C:\k8s_hardway"
-gsutil cp gs://k8s-the-hard-way/kube-proxy.kubeconfig ${k8sDir}
-gsutil cp gs://k8s-the-hard-way/$(hostname).kubeconfig ${k8sDir}
+gsutil cp gs://${BUCKET_NAME}/kube-proxy.kubeconfig ${k8sDir}
+gsutil cp gs://${BUCKET_NAME}/$(hostname).kubeconfig ${k8sDir}
 dir ${k8sDir}
 ```
 
