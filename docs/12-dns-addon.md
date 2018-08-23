@@ -4,10 +4,11 @@ In this lab you will deploy the [DNS add-on](https://kubernetes.io/docs/concepts
 
 ## The DNS Cluster Add-on
 
-Deploy the `kube-dns` cluster add-on:
+Deploy the `kube-dns` cluster add-on and patch it to only run on the Linux node:
 
 ```
 kubectl create -f https://storage.googleapis.com/kubernetes-the-hard-way/kube-dns.yaml
+kubectl patch deployment kube-dns -n=kube-system --patch "$(curl https://raw.githubusercontent.com/Microsoft/SDN/master/Kubernetes/flannel/l2bridge/manifests/node-selector-patch.yml)"
 ```
 
 > output
@@ -21,11 +22,8 @@ deployment.extensions "kube-dns" created
 
 List the pods created by the `kube-dns` deployment:
 
-TODO: this fails with "ErrImagePull" and "ImagePullBackOff" with these
-instructions; the kube-dns deployment runs on the worker nodes, not the
-controller nodes, so the Windows nodes fail! Figure out what to do about DNS on
-Windows nodes, or maybe figure out a way to configure this to only run on the
-Linux node.
+TODO: this fails with "ErrImagePull" and "ImagePullBackOff" if we run on Windows nodes. We should figure out what to do about DNS on
+Windows nodes.
 
 ```
 kubectl get pods -l k8s-app=kube-dns -n kube-system
