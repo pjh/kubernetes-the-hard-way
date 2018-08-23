@@ -187,17 +187,22 @@ not with IIS.
 
 In this section you will verify the ability to [execute commands in a container](https://kubernetes.io/docs/tasks/debug-application-cluster/get-shell-running-container/#running-individual-commands-in-a-container).
 
-Print the nginx version by executing the `nginx -v` command in the `nginx` container:
+Display the contents of the IIS serving directory by executing an `ls` command inside the `iis` container:
 
 ```
-kubectl exec -ti $POD_NAME -- dir C:\\
+kubectl exec -ti $POD_NAME -- powershell -Command "ls C:\inetpub\wwwroot"
 ```
 
-> Output (TODO: not working on Windows pods):
+> Output:
 
 ```
-container 048ee6abe0e76f58cadcd79bb21c555152d4635286cd9e21919e393458cfe930 encountered an error during CreateProcess: failure in a Windows system call: The system cannot find the file specified. (0x2) extra info: {"ApplicationName":"","CommandLine":"dir C:\\","User":"","WorkingDirectory":"C:\\","Environment":{"KUBERNETES_PORT":"tcp://10.32.0.1:443","KUBERNETES_PORT_443_TCP":"tcp://10.32.0.1:443","KUBERNETES_PORT_443_TCP_ADDR":"10.32.0.1","KUBERNETES_PORT_443_TCP_PORT":"443","KUBERNETES_PORT_443_TCP_PROTO":"tcp","KUBERNETES_SERVICE_HOST":"10.32.0.1","KUBERNETES_SERVICE_PORT":"443","KUBERNETES_SERVICE_PORT_HTTPS":"443"},"EmulateConsole":true,"CreateStdInPipe":true,"CreateStdOutPipe":true,"CreateStdErrPipe":false,"ConsoleSize":[0,0]}
-command terminated with exit code 126
+    Directory: C:\inetpub\wwwroot
+
+
+Mode                LastWriteTime         Length Name
+----                -------------         ------ ----
+-a----        8/14/2018   8:30 PM            703 iisstart.htm
+-a----        8/14/2018   8:30 PM          99710 iisstart.png
 ```
 
 ## Services
