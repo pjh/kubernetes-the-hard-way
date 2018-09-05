@@ -10,6 +10,8 @@ Explanation of the fields in the CNI config (`l2bridge.conf`):
   instance it is also Ethernet.
 * capabilities.portMappings: unsure.
 * ipam.environment: obviously we're not using azure, not sure it matters.
+  Discussion on Kubernetes #sig-windows Slack channel suggests that the ipam
+  block can be omitted entirely.
 * ipam.subnet: the $podCidr - 192.168.1.0/24 in Microsoft steps, 10.200.N.0/24
   for worker-N in these steps.
     - Get using curl from metadata server!

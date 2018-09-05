@@ -238,15 +238,6 @@ Set-Content ${l2bridgeConf} `
     "capabilities":  {
         "portMappings":  true
     },
-    "ipam":  {
-        "environment":  "azure",
-        "subnet":  "POD_CIDR",
-        "routes":  [
-            {
-                "GW":  "POD_ENDPOINT_GW"
-            }
-        ]
-    },
     "dns":  {
         "Nameservers":  [
             "10.32.0.10"
