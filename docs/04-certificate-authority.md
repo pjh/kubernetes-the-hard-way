@@ -401,19 +401,29 @@ done
 ### Windows workers
 
 We'll use [Google Cloud Storage](https://cloud.google.com/storage/) for
-transferring the certificates into the Windows worker instances. `gsutil` is the
-command line tool for working with GCS.
-
-First, make a new bucket and copy the certificates there:
+transferring the certificates into the Windows worker instances. GCS bucket
+names must be globally unique - use `uuid` to generate a unique name (or choose
+your own), then set it as a project-level metadata key for use throughout this
+guide.
 
 ```
 {
-  gsutil mb gs://k8s-the-hard-way
-  gsutil cp ca.pem gs://k8s-the-hard-way/
+  BUCKET_NAME=k8s-hard-way-$(uuid)
+  gcloud compute project-info add-metadata --metadata=k8s-bucket=${BUCKET_NAME}
+}
+```
+
+`gsutil` is the command line tool for working with GCS. Make a new bucket with
+your chosen name and copy the certificates there:
+
+```
+{
+  gsutil mb gs://${BUCKET_NAME}
+  gsutil cp ca.pem gs://${BUCKET_NAME}/
   for instance in worker-1 worker-2; do
-    gsutil cp ${instance}-key.pem ${instance}.pem gs://k8s-the-hard-way/
+    gsutil cp ${instance}-key.pem ${instance}.pem gs://${BUCKET_NAME}/
   done
-  gsutil ls gs://k8s-the-hard-way
+  gsutil ls gs://${BUCKET_NAME}
 }
 ```
 
@@ -424,8 +434,8 @@ on each Windows worker instance:
 ```
 $k8sDir = "C:\k8s_hardway"
 mkdir ${k8sDir}
-gsutil cp gs://k8s-the-hard-way/ca.pem ${k8sDir}
-gsutil cp gs://k8s-the-hard-way/$(hostname)*.pem ${k8sDir}
+gsutil cp gs://${BUCKET_NAME}/ca.pem ${k8sDir}
+gsutil cp gs://${BUCKET_NAME}/$(hostname)*.pem ${k8sDir}
 dir ${k8sDir}
 ```
 

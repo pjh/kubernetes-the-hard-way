@@ -59,3 +59,5 @@ Remove the project metadata:
 ```
 gcloud compute project-info remove-metadata --keys k8s-version
 ```
+
+TODO: clean up GCS bucket.
