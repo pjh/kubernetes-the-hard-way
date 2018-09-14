@@ -275,9 +275,9 @@ Set-Content ${l2bridgeConf} `
             }
         }
     ]
-}'.replace('POD_CIDR', ${podCidr})`
-.replace('POD_ENDPOINT_GW', ${podEndpointGateway})`
-.replace('VETH_IP', ${vethIp})
+}'.replace('POD_CIDR', ${podCidr}).`
+replace('POD_ENDPOINT_GW', ${podEndpointGateway}).`
+replace('VETH_IP', ${vethIp})
 ```
 
 See [CNI config explanation](cni-config-explanation.md) for an explanation of
