@@ -54,4 +54,10 @@ Delete the `kubernetes-the-hard-way` network VPC:
 }
 ```
 
-TODO: clean up project-level metadata, GCS bucket.
+Remove the project metadata:
+
+```
+gcloud compute project-info remove-metadata --keys k8s-version
+```
+
+TODO: clean up GCS bucket.
