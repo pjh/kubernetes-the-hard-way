@@ -204,24 +204,22 @@ command terminated with exit code 126
 
 In this section you will verify the ability to expose applications using a [Service](https://kubernetes.io/docs/concepts/services-networking/service/).
 
-TODO: figure out a service deployment for Windows.
-
-Expose the `nginx` deployment using a [NodePort](https://kubernetes.io/docs/concepts/services-networking/service/#type-nodeport) service:
+Expose the `iis-deployment` deployment using a [NodePort](https://kubernetes.io/docs/concepts/services-networking/service/#type-nodeport) service:
 
 ```
-kubectl expose deployment nginx --port 80 --type NodePort
+kubectl expose deployment iis-deployment --port 80 --type NodePort
 ```
 
 > The LoadBalancer service type can not be used because your cluster is not configured with [cloud provider integration](https://kubernetes.io/docs/getting-started-guides/scratch/#cloud-provider). Setting up cloud provider integration is out of scope for this tutorial.
 
-Retrieve the node port assigned to the `nginx` service:
+Retrieve the node port assigned to the `iis-deployment` service:
 
 ```
-NODE_PORT=$(kubectl get svc nginx \
+NODE_PORT=$(kubectl get svc iis-deployment \
   --output=jsonpath='{range .spec.ports[0]}{.nodePort}')
 ```
 
-Create a firewall rule that allows remote access to the `nginx` node port:
+Create a firewall rule that allows remote access to the `iis-deployment` node port:
 
 ```
 gcloud compute firewall-rules create kubernetes-the-hard-way-allow-nginx-service \
@@ -236,7 +234,7 @@ EXTERNAL_IP=$(gcloud compute instances describe worker-0 \
   --format 'value(networkInterfaces[0].accessConfigs[0].natIP)')
 ```
 
-Make an HTTP request using the external IP address and the `nginx` node port:
+Make an HTTP request using the external IP address and the `iis-deployment` node port:
 
 ```
 curl -I http://${EXTERNAL_IP}:${NODE_PORT}
@@ -246,14 +244,13 @@ curl -I http://${EXTERNAL_IP}:${NODE_PORT}
 
 ```
 HTTP/1.1 200 OK
-Server: nginx/1.13.12
-Date: Mon, 14 May 2018 14:01:30 GMT
+Content-Length: 703
 Content-Type: text/html
-Content-Length: 612
-Last-Modified: Mon, 09 Apr 2018 16:01:09 GMT
-Connection: keep-alive
-ETag: "5acb8e45-264"
+Last-Modified: Tue, 14 Aug 2018 20:30:44 GMT
 Accept-Ranges: bytes
+ETag: "64b03cadd34d41:0"
+Server: Microsoft-IIS/10.0
+Date: Thu, 23 Aug 2018 15:17:10 GMT
 ```
 
 ## Untrusted Workloads
