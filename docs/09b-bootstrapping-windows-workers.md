@@ -216,14 +216,6 @@ script generates.
 ```
 $vethIp = (Get-NetAdapter | Where-Object Name -Like "vEthernet (*" |`
   Get-NetIPAddress -AddressFamily IPv4).IPAddress
-$podCidr = "$([System.Text.Encoding]::ASCII.GetString((`
-  Invoke-WebRequest -UseBasicParsing -H @{'Metadata-Flavor' = 'Google'} `
-  http://metadata.google.internal/computeMetadata/v1/instance/attributes/pod-cidr).Content))"
-
-# For Windows nodes the pod gateway IP address is the .1 address in the pod
-# CIDR for the host, but from inside containers it's the .2 address.
-$podGateway = ${podCidr}.substring(0, ${podCidr}.lastIndexOf('.')) + '.1'
-$podEndpointGateway = ${podCidr}.substring(0, ${podCidr}.lastIndexOf('.')) + '.2'
 
 mkdir ${env:CNI_DIR}\config
 $l2bridgeConf = "${env:CNI_DIR}\config\l2bridge.conf"
@@ -275,9 +267,7 @@ Set-Content ${l2bridgeConf} `
             }
         }
     ]
-}'.replace('POD_CIDR', ${podCidr}).`
-replace('POD_ENDPOINT_GW', ${podEndpointGateway}).`
-replace('VETH_IP', ${vethIp})
+}'.replace('VETH_IP', ${vethIp})
 ```
 
 See [CNI config explanation](cni-config-explanation.md) for an explanation of
@@ -303,6 +293,15 @@ $endpointName = "cbr0"
 $vnicName = "vEthernet ($endpointName)"
 
 Import-Module ${env:K8S_DIR}\SDN\Kubernetes\windows\hns.psm1
+
+$podCidr = "$([System.Text.Encoding]::ASCII.GetString((`
+  Invoke-WebRequest -UseBasicParsing -H @{'Metadata-Flavor' = 'Google'} `
+  http://metadata.google.internal/computeMetadata/v1/instance/attributes/pod-cidr).Content))"
+
+# For Windows nodes the pod gateway IP address is the .1 address in the pod
+# CIDR for the host, but from inside containers it's the .2 address.
+$podGateway = ${podCidr}.substring(0, ${podCidr}.lastIndexOf('.')) + '.1'
+$podEndpointGateway = ${podCidr}.substring(0, ${podCidr}.lastIndexOf('.')) + '.2'
 
 New-HNSNetwork -Type "L2Bridge" -AddressPrefix $podCidr -Gateway $podGateway `
   -Name ${env:KUBE_NETWORK} -Verbose
