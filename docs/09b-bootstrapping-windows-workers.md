@@ -214,7 +214,7 @@ the
 script generates.
 
 ```
-$vethIp = (Get-NetAdapter | Where-Object Name -Like "vEthernet (*" |`
+$vethIp = (Get-NetAdapter | Where-Object Name -Like "vEthernet (nat*" |`
   Get-NetIPAddress -AddressFamily IPv4).IPAddress
 
 mkdir ${env:CNI_DIR}\config
@@ -355,19 +355,21 @@ worker nodes.
 
 ### Start the Worker Services
 
-Finally, open a separate PowerShell window and start the `kubelet`:
+Start `kubelet` as a background job and redirect the ooutput to a log file:
 
 ```
-& ${env:NODE_DIR}\kubelet.exe --hostname-override=$(hostname) --v=6 `
-  --pod-infra-container-image=kubeletwin/pause --resolv-conf="" `
-  --allow-privileged=true --config=${env:KUBELET_CONFIG} `
-  --enable-debugging-handlers `
-  --kubeconfig=${env:K8S_DIR}\$(hostname).kubeconfig --hairpin-mode=promiscuous-bridge `
-  --image-pull-progress-deadline=20m --cgroups-per-qos=false `
-  --enforce-node-allocatable="" --network-plugin=cni --cni-bin-dir="${env:CNI_DIR}" `
-  --cni-conf-dir="${env:CNI_DIR}\config" --register-node=true
+Start-Job -Name kubelet -ScriptBlock {
+  & ${env:NODE_DIR}\kubelet.exe --hostname-override=$(hostname) --v=6 `
+    --pod-infra-container-image=kubeletwin/pause --resolv-conf="" `
+    --allow-privileged=true --config=${env:KUBELET_CONFIG} `
+    --enable-debugging-handlers `
+    --kubeconfig=${env:K8S_DIR}\$(hostname).kubeconfig --hairpin-mode=promiscuous-bridge `
+    --image-pull-progress-deadline=20m --cgroups-per-qos=false `
+    --enforce-node-allocatable="" --network-plugin=cni --cni-bin-dir="${env:CNI_DIR}" `
+    --cni-conf-dir="${env:CNI_DIR}\config" --register-node=true `
+    *> /kubelet.log
+}
 ```
-
 Note: to use Hyper-V isolation for the pods add
 `--feature-gates=HyperVContainer=true`.
 
@@ -375,12 +377,15 @@ TODO: move the rest of the kubelet command-line flags into `${env:KUBELET_CONFIG
 See https://kubernetes.io/docs/tasks/administer-cluster/kubelet-config-file/ for
 the flags that are supported.
 
-Wait a few seconds, then open a new PowerShell window and then start kube-proxy:
+Wait a few seconds, then start kube-proxy:
 
 ```
-& ${env:NODE_DIR}\kube-proxy.exe --v=4 --proxy-mode=kernelspace `
-  --hostname-override=$(hostname) --kubeconfig=${env:K8S_DIR}\kube-proxy.kubeconfig `
-  --cluster-cidr="10.200.0.0/16"
+Start-Job -Name kube-proxy -ScriptBlock {
+  & ${env:NODE_DIR}\kube-proxy.exe --v=4 --proxy-mode=kernelspace `
+    --hostname-override=$(hostname) --kubeconfig=${env:K8S_DIR}\kube-proxy.kubeconfig `
+    --cluster-cidr="10.200.0.0/16" `
+    *> /kproxy.log
+}
 ```
 
 After a short delay the worker nodes should successfully join the cluster:
