@@ -311,6 +311,10 @@ $hnsEndpoint = New-HnsEndpoint -NetworkId $hnsNetwork.Id -Name $endpointName `
 Attach-HnsHostEndpoint -EndpointID $hnsEndpoint.Id -CompartmentID 1 -Verbose
 netsh interface ipv4 set interface "$vnicName" forwarding=enabled
 Get-HNSPolicyList | Remove-HnsPolicyList
+
+# Workaround for https://github.com/Microsoft/hcsshim/issues/299: re-add the
+# route to the GCE metadata server after creating the HNS network.
+route /p add 169.254.169.254 mask 255.255.255.255 0.0.0.0
 ```
 
 ### Configure the Kubelet
