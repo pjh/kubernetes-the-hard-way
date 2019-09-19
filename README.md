@@ -1,5 +1,12 @@
 # Windows Kubernetes The Hard Way
 
+**NOTE:** Windows support in Kubernetes continues to improve and evolve. This
+tutorial may still be useful and the resulting cluster may even still work, but
+it has not been kept up to date. For the most up-to-date steps for bringing up a
+cluster with Windows nodes on Google Compute Engine see
+[this code in the main Kubernetes repository](https://github.com/kubernetes/kubernetes/blob/master/cluster/gce/windows/configure.ps1).
+For an automated, less-hard way to bring up the cluster check out the
+[README](https://github.com/kubernetes/kubernetes/blob/master/cluster/gce/windows/README-GCE-Windows-kube-up.md).
 This tutorial walks you through setting up a heterogeneous Kubernetes cluster
 that includes both Windows and Linux worker nodes. Kubernetes The Hard Way is
 optimized for learning, which means taking the long route to ensure you
